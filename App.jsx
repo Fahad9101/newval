@@ -956,7 +956,7 @@ export default function App() {
           marginBottom: 8,
         }}
       >
-        Developed at KFSHRC-J
+        Developed for KFSHRC-J IM Residents 
       </div>
     </div>
   )
