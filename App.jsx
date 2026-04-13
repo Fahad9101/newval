@@ -267,6 +267,44 @@ function formatFirebaseDate(ts) {
   return ""
 }
 
+function getComparison(firstEval, latestEval) {
+  if (!firstEval || !latestEval) return []
+  return domains.map((d) => {
+    const first = Number(firstEval.scores?.[d.key] || 0)
+    const latest = Number(latestEval.scores?.[d.key] || 0)
+    const diff = latest - first
+    return {
+      key: d.key,
+      title: d.title,
+      first,
+      latest,
+      diff,
+    }
+  })
+}
+
+function getTrendComments(comparison) {
+  if (!comparison.length) return []
+
+  const improving = comparison.filter((x) => x.diff > 0).map((x) => x.title)
+  const declining = comparison.filter((x) => x.diff < 0).map((x) => x.title)
+  const stable = comparison.filter((x) => x.diff === 0).map((x) => x.title)
+
+  const comments = []
+
+  if (improving.length) {
+    comments.push(`Improving in ${improving.slice(0, 3).join(", ")}.`)
+  }
+  if (declining.length) {
+    comments.push(`Decline noted in ${declining.slice(0, 3).join(", ")}.`)
+  }
+  if (stable.length && comments.length === 0) {
+    comments.push(`Scores are currently stable across ${stable.slice(0, 3).join(", ")}.`)
+  }
+
+  return comments
+}
+
 function RadarChart({ scores }) {
   const size = 320
   const center = size / 2
@@ -502,6 +540,47 @@ export default function App() {
             residentData.length
         )
       : 0
+
+  const firstResidentEval = residentData.length ? residentData[0] : null
+  const latestResidentEval = residentData.length ? residentData[residentData.length - 1] : null
+  const comparison = useMemo(
+    () => getComparison(firstResidentEval, latestResidentEval),
+    [firstResidentEval, latestResidentEval]
+  )
+  const trendComments = useMemo(() => getTrendComments(comparison), [comparison])
+
+  const cohortAnalytics = useMemo(() => {
+    if (!evaluations.length) {
+      return {
+        totalEvaluations: 0,
+        avgTotal: 0,
+        avgByDomain: {},
+        weakestDomain: "",
+      }
+    }
+
+    const totals = evaluations.map((e) => Number(e.total || e.totalScore || 0))
+    const avgTotal = Math.round(totals.reduce((a, b) => a + b, 0) / totals.length)
+
+    const avgByDomain = {}
+    domains.forEach((d) => {
+      const values = evaluations.map((e) => Number(e.scores?.[d.key] || 0))
+      avgByDomain[d.key] = values.length
+        ? Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2))
+        : 0
+    })
+
+    const weakestDomainKey = Object.entries(avgByDomain).sort((a, b) => a[1] - b[1])[0]?.[0] || ""
+    const weakestDomain =
+      domains.find((d) => d.key === weakestDomainKey)?.title || ""
+
+    return {
+      totalEvaluations: evaluations.length,
+      avgTotal,
+      avgByDomain,
+      weakestDomain,
+    }
+  }, [evaluations])
 
   const handleField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -968,151 +1047,252 @@ export default function App() {
         )}
 
         {isEvaluator && (
-          <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-                alignItems: "center",
-                marginBottom: 14,
-              }}
-            >
-              <h2 style={{ margin: 0, fontSize: 20 }}>Evaluator Dashboard</h2>
-
+          <>
+            <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
+              <h2 style={{ marginTop: 0, fontSize: 20 }}>Cohort Analytics</h2>
               <div
                 style={{
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  alignItems: "center",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 12,
                 }}
               >
-                <button
-                  onClick={() => exportToCSV(evaluations)}
-                  style={{ ...buttonBase, background: "#0ea5e9" }}
-                >
-                  Export CSV
-                </button>
+                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12 }}>
+                  <strong>Total evaluations:</strong> {cohortAnalytics.totalEvaluations}
+                </div>
+                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12 }}>
+                  <strong>Average total score:</strong> {cohortAnalytics.avgTotal}/24
+                </div>
+                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12 }}>
+                  <strong>Weakest domain overall:</strong> {cohortAnalytics.weakestDomain || "—"}
+                </div>
+              </div>
 
-                <input
-                  placeholder="Search resident / case / evaluator / rotation"
-                  value={dashboardSearch}
-                  onChange={(e) => setDashboardSearch(e.target.value)}
-                  style={{ ...inputStyle, marginTop: 0, minWidth: 280 }}
-                />
-
-                <select
-                  value={ratingFilter}
-                  onChange={(e) => setRatingFilter(e.target.value)}
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    border: "1px solid #cbd5e1",
-                    background: "white",
-                  }}
-                >
-                  <option>All</option>
-                  <option>Junior</option>
-                  <option>Intermediate</option>
-                  <option>Senior</option>
-                  <option>Near Consultant</option>
-                </select>
+              <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
+                {domains.map((d) => (
+                  <div
+                    key={d.key}
+                    style={{
+                      background: "white",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 10,
+                      padding: 12,
+                    }}
+                  >
+                    <strong>{d.title}:</strong> {cohortAnalytics.avgByDomain[d.key] ?? 0} / 4
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <input
-                placeholder="Enter resident name for timeline"
-                value={selectedResident}
-                onChange={(e) => setSelectedResident(e.target.value)}
-                style={inputStyle}
-              />
+            <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  marginBottom: 14,
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: 20 }}>Evaluator Dashboard</h2>
 
-              {selectedResident && (
                 <div
                   style={{
-                    marginTop: 10,
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  <button
+                    onClick={() => exportToCSV(evaluations)}
+                    style={{ ...buttonBase, background: "#0ea5e9" }}
+                  >
+                    Export CSV
+                  </button>
+
+                  <input
+                    placeholder="Search resident / case / evaluator / rotation"
+                    value={dashboardSearch}
+                    onChange={(e) => setDashboardSearch(e.target.value)}
+                    style={{ ...inputStyle, marginTop: 0, minWidth: 280 }}
+                  />
+
+                  <select
+                    value={ratingFilter}
+                    onChange={(e) => setRatingFilter(e.target.value)}
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      border: "1px solid #cbd5e1",
+                      background: "white",
+                    }}
+                  >
+                    <option>All</option>
+                    <option>Junior</option>
+                    <option>Intermediate</option>
+                    <option>Senior</option>
+                    <option>Near Consultant</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <input
+                  placeholder="Enter resident name for timeline / comparison"
+                  value={selectedResident}
+                  onChange={(e) => setSelectedResident(e.target.value)}
+                  style={inputStyle}
+                />
+
+                {selectedResident && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: 12,
+                      borderRadius: 10,
+                      background: "white",
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    <strong>Evaluations:</strong> {residentData.length} <br />
+                    <strong>Average Score:</strong> {residentAverage}/24
+                  </div>
+                )}
+              </div>
+
+              {residentData.length >= 2 && (
+                <div
+                  style={{
+                    marginBottom: 16,
+                    padding: 14,
+                    borderRadius: 12,
+                    background: "white",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <h3 style={{ marginTop: 0 }}>Resident Comparison Over Time</h3>
+                  <div style={{ marginBottom: 10 }}>
+                    <strong>First:</strong> {formatFirebaseDate(firstResidentEval?.createdAt)} · {firstResidentEval?.total || firstResidentEval?.totalScore || 0}/24
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <strong>Latest:</strong> {formatFirebaseDate(latestResidentEval?.createdAt)} · {latestResidentEval?.total || latestResidentEval?.totalScore || 0}/24
+                  </div>
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {comparison.map((c) => (
+                      <div
+                        key={c.key}
+                        style={{
+                          padding: 10,
+                          borderRadius: 8,
+                          border: "1px solid #e2e8f0",
+                          background: "#f8fafc",
+                        }}
+                      >
+                        <strong>{c.title}:</strong> {c.first} → {c.latest}{" "}
+                        <span
+                          style={{
+                            color: c.diff > 0 ? "#16a34a" : c.diff < 0 ? "#dc2626" : "#475569",
+                            fontWeight: 700,
+                          }}
+                        >
+                          ({c.diff > 0 ? `+${c.diff}` : c.diff})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {trendComments.length > 0 && (
+                    <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                      {trendComments.map((comment, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: 10,
+                            borderRadius: 8,
+                            border: "1px solid #e2e8f0",
+                            background: "#eff6ff",
+                          }}
+                        >
+                          {comment}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {filteredEvaluations.length === 0 ? (
+                <div
+                  style={{
                     padding: 12,
                     borderRadius: 10,
                     background: "white",
                     border: "1px solid #e2e8f0",
                   }}
                 >
-                  <strong>Evaluations:</strong> {residentData.length} <br />
-                  <strong>Average Score:</strong> {residentAverage}/24
+                  No matching evaluations.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {filteredEvaluations.map((e) => (
+                    <div
+                      key={e.id}
+                      style={{
+                        padding: 14,
+                        borderRadius: 12,
+                        background: "white",
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                        <div>
+                          <div><strong>Resident:</strong> {e.resident || "—"}</div>
+                          <div><strong>Case:</strong> {e.caseName || "—"}</div>
+                          <div><strong>Rotation:</strong> {e.rotation || "—"}</div>
+                          <div><strong>Evaluator:</strong> {e.evaluator || "—"}</div>
+                          <div><strong>Score:</strong> {e.total || e.totalScore || 0}/24 {e.globalRating ? `· ${e.globalRating}` : ""}</div>
+                          <div><strong>Date:</strong> {formatFirebaseDate(e.createdAt)}</div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
+                          <button
+                            onClick={() => loadEvaluation(e)}
+                            style={{ ...buttonBase, background: "#0f766e" }}
+                          >
+                            Load into Form
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEvaluation(e.id)}
+                            style={{ ...buttonBase, background: "#dc2626" }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+
+                      {e.oneLineSummary && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: 10,
+                            borderRadius: 8,
+                            background: "#f8fafc",
+                            border: "1px solid #e2e8f0",
+                          }}
+                        >
+                          <strong>Summary:</strong> {e.oneLineSummary}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-
-            {filteredEvaluations.length === 0 ? (
-              <div
-                style={{
-                  padding: 12,
-                  borderRadius: 10,
-                  background: "white",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                No matching evaluations.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 10 }}>
-                {filteredEvaluations.map((e) => (
-                  <div
-                    key={e.id}
-                    style={{
-                      padding: 14,
-                      borderRadius: 12,
-                      background: "white",
-                      border: "1px solid #e2e8f0",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                      <div>
-                        <div><strong>Resident:</strong> {e.resident || "—"}</div>
-                        <div><strong>Case:</strong> {e.caseName || "—"}</div>
-                        <div><strong>Rotation:</strong> {e.rotation || "—"}</div>
-                        <div><strong>Evaluator:</strong> {e.evaluator || "—"}</div>
-                        <div><strong>Score:</strong> {e.total || e.totalScore || 0}/24 {e.globalRating ? `· ${e.globalRating}` : ""}</div>
-                        <div><strong>Date:</strong> {formatFirebaseDate(e.createdAt)}</div>
-                      </div>
-
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
-                        <button
-                          onClick={() => loadEvaluation(e)}
-                          style={{ ...buttonBase, background: "#0f766e" }}
-                        >
-                          Load into Form
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEvaluation(e.id)}
-                          style={{ ...buttonBase, background: "#dc2626" }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-
-                    {e.oneLineSummary && (
-                      <div
-                        style={{
-                          marginTop: 10,
-                          padding: 10,
-                          borderRadius: 8,
-                          background: "#f8fafc",
-                          border: "1px solid #e2e8f0",
-                        }}
-                      >
-                        <strong>Summary:</strong> {e.oneLineSummary}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          </>
         )}
 
         <div style={{ textAlign: "right", color: "green", fontSize: 12, marginTop: 18 }}>
