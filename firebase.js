@@ -1,11 +1,12 @@
-import { initializeApp } from 'firebase/app'
+import { initializeApp } from "firebase/app"
 import {
   getAuth,
   signInAnonymously,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
-} from 'firebase/auth'
+} from "firebase/auth"
+
 import {
   getFirestore,
   collection,
@@ -17,15 +18,15 @@ import {
   onSnapshot,
   query,
   orderBy,
-} from 'firebase/firestore'
+} from "firebase/firestore"
 
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT.firebaseapp.com',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_PROJECT.firebasestorage.app',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: "AIzaSyBz00_ifpMM2tbRBILZVU-cEvfiBqTCRMI",
+  authDomain: "crft-c9f31.firebaseapp.com",
+  projectId: "crft-c9f31",
+  storageBucket: "crft-c9f31.firebasestorage.app",
+  messagingSenderId: "337127729938",
+  appId: "1:337127729938:web:4e44fa6a5050c3d5ace1cb"
 }
 
 const app = initializeApp(firebaseConfig)
@@ -34,49 +35,47 @@ export const auth = getAuth(app)
 export const db = getFirestore(app)
 
 export async function signInResident() {
-  await signInAnonymously(auth)
+  return signInAnonymously(auth)
 }
 
 export async function signInEvaluator(email, password) {
-  await signInWithEmailAndPassword(auth, email, password)
+  return signInWithEmailAndPassword(auth, email, password)
 }
 
 export async function logOut() {
-  await signOut(auth)
+  return signOut(auth)
 }
 
 export function watchAuth(callback) {
   return onAuthStateChanged(auth, callback)
 }
 
-export async function createEvaluation(record) {
-  return addDoc(collection(db, 'evaluations'), {
-    ...record,
+export async function createEvaluation(data) {
+  return addDoc(collection(db, "evaluations"), {
+    ...data,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
 }
 
 export async function updateEvaluation(id, updates) {
-  const ref = doc(db, 'evaluations', id)
-  return updateDoc(ref, {
+  return updateDoc(doc(db, "evaluations", id), {
     ...updates,
     updatedAt: serverTimestamp(),
   })
 }
 
 export async function removeEvaluation(id) {
-  const ref = doc(db, 'evaluations', id)
-  return deleteDoc(ref)
+  return deleteDoc(doc(db, "evaluations", id))
 }
 
 export function subscribeEvaluations(callback) {
-  const q = query(collection(db, 'evaluations'), orderBy('createdAt', 'desc'))
+  const q = query(collection(db, "evaluations"), orderBy("createdAt", "desc"))
   return onSnapshot(q, (snapshot) => {
-    const rows = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
+    const data = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
     }))
-    callback(rows)
+    callback(data)
   })
 }
