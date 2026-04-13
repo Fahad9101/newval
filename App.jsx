@@ -1,3 +1,4 @@
+import React from "react"
 import { useEffect, useMemo, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 
