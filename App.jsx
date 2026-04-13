@@ -222,6 +222,51 @@ function getConsultantReport({ resident, evaluator, rotation, caseName, scores, 
   return [intro, para1, para2, para3].filter(Boolean).join("\n\n")
 }
 
+function exportToCSV(data) {
+  if (!data.length) return
+
+  const headers = [
+    "Resident",
+    "Evaluator",
+    "Rotation",
+    "Case",
+    "Total",
+    "Global Rating",
+    "Submitted By",
+    "Role",
+    "Date",
+  ]
+
+  const rows = data.map((e) => [
+    `"${e.resident || ""}"`,
+    `"${e.evaluator || ""}"`,
+    `"${e.rotation || ""}"`,
+    `"${e.caseName || ""}"`,
+    `"${e.total || e.totalScore || 0}"`,
+    `"${e.globalRating || ""}"`,
+    `"${e.submittedBy || ""}"`,
+    `"${e.submittedByRole || ""}"`,
+    `"${formatFirebaseDate(e.createdAt)}"`,
+  ])
+
+  const csvContent = [headers, ...rows].map((r) => r.join(",")).join("\n")
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = "crft_evaluations.csv"
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function formatFirebaseDate(ts) {
+  if (!ts) return ""
+  if (typeof ts?.seconds === "number") {
+    return new Date(ts.seconds * 1000).toLocaleString()
+  }
+  return ""
+}
+
 function RadarChart({ scores }) {
   const size = 320
   const center = size / 2
@@ -256,16 +301,13 @@ function RadarChart({ scores }) {
         {[1, 2, 3, 4].map((level) => (
           <polygon key={level} points={pointsForLevel(level)} fill="none" stroke="#d1d5db" strokeWidth="1" />
         ))}
-
         {keys.map((key, i) => {
           const angle = (Math.PI * 2 * i) / keys.length - Math.PI / 2
           const x = center + Math.cos(angle) * radius
           const y = center + Math.sin(angle) * radius
           return <line key={key} x1={center} y1={center} x2={x} y2={y} stroke="#d1d5db" strokeWidth="1" />
         })}
-
         <polygon points={dataPoints} fill="rgba(12, 74, 110, 0.18)" stroke="#0c4a6e" strokeWidth="2" />
-
         {keys.map((key, i) => {
           const angle = (Math.PI * 2 * i) / keys.length - Math.PI / 2
           const r = (radius * scores[key]) / levels
@@ -351,6 +393,7 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState("")
   const [dashboardSearch, setDashboardSearch] = useState("")
   const [ratingFilter, setRatingFilter] = useState("All")
+  const [selectedResident, setSelectedResident] = useState("")
 
   const [form, setForm] = useState(initialForm)
 
@@ -373,6 +416,28 @@ export default function App() {
     const t = setTimeout(() => setStatusMessage(""), 2500)
     return () => clearTimeout(t)
   }, [statusMessage])
+
+  useEffect(() => {
+    const style = document.createElement("style")
+    style.innerHTML = `
+      @media print {
+        button, input, select {
+          display: none !important;
+        }
+        .hide-print {
+          display: none !important;
+        }
+        .print-card {
+          border: none !important;
+          box-shadow: none !important;
+        }
+      }
+    `
+    document.head.appendChild(style)
+    return () => {
+      document.head.removeChild(style)
+    }
+  }, [])
 
   const total = useMemo(
     () => Object.values(form.scores).reduce((sum, value) => sum + Number(value), 0),
@@ -422,6 +487,21 @@ export default function App() {
       return textMatch && ratingMatch
     })
   }, [evaluations, dashboardSearch, ratingFilter])
+
+  const residentData = useMemo(() => {
+    if (!selectedResident.trim()) return []
+    return evaluations
+      .filter((e) => (e.resident || "").toLowerCase() === selectedResident.trim().toLowerCase())
+      .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+  }, [evaluations, selectedResident])
+
+  const residentAverage =
+    residentData.length > 0
+      ? Math.round(
+          residentData.reduce((sum, e) => sum + Number(e.total || e.totalScore || 0), 0) /
+            residentData.length
+        )
+      : 0
 
   const handleField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -624,7 +704,7 @@ export default function App() {
           <div style={{ marginTop: 6, opacity: 0.95, fontSize: 15 }}>Clinical Reasoning Feedback Tool</div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <div className="hide-print" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
           <button onClick={resetForm} style={{ ...buttonBase, background: "#e11d48" }}>
             Reset
           </button>
@@ -641,6 +721,7 @@ export default function App() {
 
         {statusMessage && (
           <div
+            className="hide-print"
             style={{
               marginBottom: 16,
               padding: 12,
@@ -655,6 +736,7 @@ export default function App() {
         )}
 
         <div
+          className="hide-print"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -688,7 +770,7 @@ export default function App() {
             marginBottom: 18,
           }}
         >
-          <div style={mutedCard}>
+          <div className="print-card" style={mutedCard}>
             <h2 style={{ marginTop: 0, fontSize: 20 }}>Summary</h2>
             <p style={{ margin: "8px 0" }}><strong>Total Score:</strong> {total} / 24</p>
             {globalRating && <p style={{ margin: "8px 0" }}><strong>Global Rating:</strong> {globalRating}</p>}
@@ -707,13 +789,13 @@ export default function App() {
             )}
           </div>
 
-          <div style={sectionCard}>
+          <div className="print-card" style={sectionCard}>
             <h2 style={{ marginTop: 0, fontSize: 20 }}>Performance Radar</h2>
             <RadarChart scores={form.scores} />
           </div>
         </div>
 
-        <div style={mutedCard}>
+        <div className="hide-print" style={mutedCard}>
           <div
             style={{
               display: "flex",
@@ -753,6 +835,7 @@ export default function App() {
             return (
               <div
                 key={domain.key}
+                className="print-card"
                 style={{
                   border: isHighest ? "2px solid #16a34a" : isLowest ? "2px solid #dc2626" : "1px solid #dbe4ee",
                   borderRadius: 16,
@@ -769,6 +852,7 @@ export default function App() {
                 </div>
 
                 <select
+                  className="hide-print"
                   value={form.scores[domain.key]}
                   onChange={(e) => handleScore(domain.key, e.target.value)}
                   style={{
@@ -808,7 +892,7 @@ export default function App() {
         </div>
 
         {autoStrengths.length > 0 && (
-          <div style={{ ...mutedCard, marginBottom: 18 }}>
+          <div className="print-card" style={{ ...mutedCard, marginBottom: 18 }}>
             <h2 style={{ marginTop: 0, fontSize: 20 }}>Auto-Generated Strengths</h2>
             <div style={{ display: "grid", gap: 10 }}>
               {autoStrengths.map((item, index) => (
@@ -829,7 +913,7 @@ export default function App() {
         )}
 
         {priorityRecommendations.length > 0 && (
-          <div style={{ ...mutedCard, marginBottom: 18 }}>
+          <div className="print-card" style={{ ...mutedCard, marginBottom: 18 }}>
             <h2 style={{ marginTop: 0, fontSize: 20 }}>Top 2 Priorities</h2>
             <div style={{ display: "grid", gap: 10 }}>
               {priorityRecommendations.map((item, index) => (
@@ -851,6 +935,7 @@ export default function App() {
 
         {consultantReport && (
           <div
+            className="print-card"
             style={{
               border: "1px solid #dbe4ee",
               borderRadius: 16,
@@ -859,7 +944,7 @@ export default function App() {
               marginBottom: 18,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <div className="hide-print" style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <h2 style={{ marginTop: 0, fontSize: 20, marginBottom: 0 }}>Consultant Report Generator</h2>
               <button onClick={copyConsultantReport} style={{ ...buttonBase, background: "#1d4ed8" }}>
                 Copy Report
@@ -883,7 +968,7 @@ export default function App() {
         )}
 
         {isEvaluator && (
-          <div style={{ ...mutedCard, marginBottom: 18 }}>
+          <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
             <div
               style={{
                 display: "flex",
@@ -904,12 +989,20 @@ export default function App() {
                   alignItems: "center",
                 }}
               >
+                <button
+                  onClick={() => exportToCSV(evaluations)}
+                  style={{ ...buttonBase, background: "#0ea5e9" }}
+                >
+                  Export CSV
+                </button>
+
                 <input
                   placeholder="Search resident / case / evaluator / rotation"
                   value={dashboardSearch}
                   onChange={(e) => setDashboardSearch(e.target.value)}
                   style={{ ...inputStyle, marginTop: 0, minWidth: 280 }}
                 />
+
                 <select
                   value={ratingFilter}
                   onChange={(e) => setRatingFilter(e.target.value)}
@@ -927,6 +1020,30 @@ export default function App() {
                   <option>Near Consultant</option>
                 </select>
               </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <input
+                placeholder="Enter resident name for timeline"
+                value={selectedResident}
+                onChange={(e) => setSelectedResident(e.target.value)}
+                style={inputStyle}
+              />
+
+              {selectedResident && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: 12,
+                    borderRadius: 10,
+                    background: "white",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <strong>Evaluations:</strong> {residentData.length} <br />
+                  <strong>Average Score:</strong> {residentAverage}/24
+                </div>
+              )}
             </div>
 
             {filteredEvaluations.length === 0 ? (
@@ -958,10 +1075,8 @@ export default function App() {
                         <div><strong>Case:</strong> {e.caseName || "—"}</div>
                         <div><strong>Rotation:</strong> {e.rotation || "—"}</div>
                         <div><strong>Evaluator:</strong> {e.evaluator || "—"}</div>
-                        <div>
-                          <strong>Score:</strong> {e.total || e.totalScore || 0}/24{" "}
-                          {e.globalRating ? `· ${e.globalRating}` : ""}
-                        </div>
+                        <div><strong>Score:</strong> {e.total || e.totalScore || 0}/24 {e.globalRating ? `· ${e.globalRating}` : ""}</div>
+                        <div><strong>Date:</strong> {formatFirebaseDate(e.createdAt)}</div>
                       </div>
 
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
