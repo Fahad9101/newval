@@ -8,3 +8,49 @@ body {
 #root {
   min-height: 100vh;
 }
+.container {
+  max-width: 900px;
+  margin: auto;
+  font-family: Arial;
+}
+
+.card-grid {
+  display: flex;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.card {
+  border: 1px solid #ccc;
+  padding: 15px;
+  border-radius: 12px;
+  flex: 1;
+}
+
+.toolbar {
+  margin-bottom: 15px;
+}
+
+.input-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.summary {
+  margin: 15px 0;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+}
+
+.list-item {
+  border-bottom: 1px solid #eee;
+  padding: 5px;
+}
+
+footer {
+  text-align: right;
+  color: green;
+  margin-top: 20px;
+}
