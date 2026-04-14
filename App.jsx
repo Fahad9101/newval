@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import {
   signInResident,
@@ -712,6 +712,11 @@ export default function App() {
   const [traineeAnswer, setTraineeAnswer] = useState("")
   const [benchmarkResult, setBenchmarkResult] = useState(null)
 
+  const [speechSupported, setSpeechSupported] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [speechError, setSpeechError] = useState("")
+  const recognitionRef = useRef(null)
+
   const [form, setForm] = useState(initialForm)
 
   const selectedCase = useMemo(
@@ -740,6 +745,12 @@ export default function App() {
   }, [statusMessage])
 
   useEffect(() => {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition
+    setSpeechSupported(Boolean(SpeechRecognition))
+  }, [])
+
+  useEffect(() => {
     const style = document.createElement("style")
     style.innerHTML = `
       @media print {
@@ -758,6 +769,17 @@ export default function App() {
     document.head.appendChild(style)
     return () => {
       document.head.removeChild(style)
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      try {
+        if (recognitionRef.current) {
+          recognitionRef.current.stop()
+        }
+      } catch {
+      }
     }
   }, [])
 
@@ -874,11 +896,97 @@ export default function App() {
     }
   }, [evaluations])
 
+  const stopVoiceTyping = () => {
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+    } catch {
+    }
+  }
+
+  const startVoiceTyping = () => {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      setSpeechError("Voice typing is not supported in this browser.")
+      return
+    }
+
+    if (!selectedCase) {
+      setSpeechError("Select a case first before voice typing.")
+      return
+    }
+
+    setSpeechError("")
+
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+    } catch {
+    }
+
+    const recognition = new SpeechRecognition()
+    recognitionRef.current = recognition
+    recognition.lang = "en-US"
+    recognition.interimResults = true
+    recognition.continuous = true
+    recognition.maxAlternatives = 1
+
+    let finalTranscript = ""
+    let lastRendered = traineeAnswer.trim()
+
+    recognition.onstart = () => {
+      setIsListening(true)
+    }
+
+    recognition.onresult = (event) => {
+      let interimTranscript = ""
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + " "
+        } else {
+          interimTranscript += transcript
+        }
+      }
+
+      const basePrefix = lastRendered ? `${lastRendered} ` : ""
+      const nextText = `${basePrefix}${finalTranscript}${interimTranscript}`.trim()
+      setTraineeAnswer(nextText)
+    }
+
+    recognition.onerror = (event) => {
+      const err = event?.error || "Voice typing failed."
+      if (err !== "aborted") {
+        setSpeechError(err)
+      }
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+      const finalText = finalTranscript.trim()
+      if (finalText) {
+        setTraineeAnswer((prev) => {
+          const existing = lastRendered || prev.trim()
+          return existing ? `${existing} ${finalText}`.trim() : finalText
+        })
+      }
+    }
+
+    recognition.start()
+  }
+
   const assignRandomCase = () => {
     if (!universalCases.length) return
     const randomIndex = Math.floor(Math.random() * universalCases.length)
     const picked = universalCases[randomIndex]
 
+    stopVoiceTyping()
     setSelectedCaseKey(picked.key)
     setForm((prev) => ({
       ...prev,
@@ -887,17 +995,20 @@ export default function App() {
     setFacultyMode(false)
     setTraineeAnswer("")
     setBenchmarkResult(null)
+    setSpeechError("")
     setStatusMessage(`Random case assigned: ${picked.title}`)
   }
 
   const useSelectedCase = () => {
     if (!selectedCase) return
+    stopVoiceTyping()
     setForm((prev) => ({
       ...prev,
       caseName: selectedCase.title,
     }))
     setBenchmarkResult(null)
     setTraineeAnswer("")
+    setSpeechError("")
     setStatusMessage(`Loaded case: ${selectedCase.title}`)
   }
 
@@ -927,6 +1038,7 @@ export default function App() {
   }
 
   const resetForm = () => {
+    stopVoiceTyping()
     setForm({
       resident: "",
       evaluator: "",
@@ -939,6 +1051,7 @@ export default function App() {
     setFacultyMode(false)
     setTraineeAnswer("")
     setBenchmarkResult(null)
+    setSpeechError("")
   }
 
   const submit = async () => {
@@ -978,6 +1091,7 @@ export default function App() {
   }
 
   const loadEvaluation = (record) => {
+    stopVoiceTyping()
     setForm({
       resident: record.resident || "",
       evaluator: record.evaluator || "",
@@ -990,6 +1104,7 @@ export default function App() {
     setTraineeAnswer(record.traineeAnswer || "")
     setBenchmarkResult(record.benchmarkResult || null)
     setFacultyMode(false)
+    setSpeechError("")
     setStatusMessage("Loaded into form.")
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
@@ -1174,10 +1289,12 @@ export default function App() {
               <select
                 value={selectedCaseKey}
                 onChange={(e) => {
+                  stopVoiceTyping()
                   setSelectedCaseKey(e.target.value)
                   setBenchmarkResult(null)
                   setTraineeAnswer("")
                   setFacultyMode(false)
+                  setSpeechError("")
                 }}
                 style={{
                   padding: 12,
@@ -1355,7 +1472,7 @@ export default function App() {
                   rows={7}
                   value={traineeAnswer}
                   onChange={(e) => setTraineeAnswer(e.target.value)}
-                  placeholder="Paste or type the trainee reasoning here..."
+                  placeholder="Paste, type, or dictate the trainee reasoning here..."
                   style={{
                     width: "100%",
                     padding: 12,
@@ -1368,19 +1485,64 @@ export default function App() {
                 />
 
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {speechSupported && (
+                    <button
+                      onClick={isListening ? stopVoiceTyping : startVoiceTyping}
+                      style={{
+                        ...buttonBase,
+                        background: isListening ? "#b91c1c" : "#7c3aed",
+                      }}
+                    >
+                      {isListening ? "Stop Listening" : "🎤 Voice Type"}
+                    </button>
+                  )}
+
                   <button onClick={runBenchmark} style={{ ...buttonBase, background: "#1d4ed8" }}>
                     Run Benchmark
                   </button>
+
                   <button
                     onClick={() => {
+                      stopVoiceTyping()
                       setTraineeAnswer("")
                       setBenchmarkResult(null)
+                      setSpeechError("")
                     }}
                     style={{ ...buttonBase, background: "#64748b" }}
                   >
                     Clear Benchmark
                   </button>
                 </div>
+
+                {!speechSupported && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "#fff7ed",
+                      border: "1px solid #fed7aa",
+                      color: "#7c2d12",
+                    }}
+                  >
+                    Voice typing is not supported in this browser. Manual typing still works.
+                  </div>
+                )}
+
+                {speechError && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: 10,
+                      borderRadius: 8,
+                      background: "#fef2f2",
+                      border: "1px solid #fecaca",
+                      color: "#991b1b",
+                    }}
+                  >
+                    {speechError}
+                  </div>
+                )}
 
                 {benchmarkResult && (
                   <div
