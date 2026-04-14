@@ -286,19 +286,21 @@ const universalCases = [
   },
 ]
 
+const initialScores = {
+  problemFraming: 0,
+  syndromeIdentification: 0,
+  differentialDiagnosis: 0,
+  dataInterpretation: 0,
+  anticipation: 0,
+  reassessment: 0,
+}
+
 const initialForm = {
   resident: "",
   evaluator: "",
   rotation: "",
   caseName: "",
-  scores: {
-    problemFraming: 0,
-    syndromeIdentification: 0,
-    differentialDiagnosis: 0,
-    dataInterpretation: 0,
-    anticipation: 0,
-    reassessment: 0,
-  },
+  scores: initialScores,
 }
 
 function getGlobalRating(total) {
@@ -493,6 +495,59 @@ function getTrendComments(comparison) {
   return comments
 }
 
+function normalizeText(text = "") {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function keywordHit(answer, target) {
+  const a = normalizeText(answer)
+  const t = normalizeText(target)
+
+  if (!a || !t) return false
+  if (a.includes(t)) return true
+
+  const words = t.split(" ").filter((w) => w.length > 3)
+  if (!words.length) return false
+
+  const matched = words.filter((w) => a.includes(w)).length
+  return matched / words.length >= 0.6
+}
+
+function benchmarkCaseAnswer(answer, selectedCase) {
+  if (!selectedCase || !answer.trim()) return null
+
+  const mustHit = selectedCase.mustHit || []
+  const reasoning = selectedCase.reasoningMap || []
+  const redFlags = selectedCase.redFlags || []
+
+  const mustHitMatched = mustHit.filter((point) => keywordHit(answer, point))
+  const reasoningMatched = reasoning.filter((point) => keywordHit(answer, point))
+  const redFlagsPotentiallyMissed = redFlags.filter((flag) => !keywordHit(answer, flag))
+
+  const mustHitScore = mustHit.length ? (mustHitMatched.length / mustHit.length) * 100 : 0
+  const reasoningScore = reasoning.length ? (reasoningMatched.length / reasoning.length) * 100 : 0
+  const totalScore = Math.round(mustHitScore * 0.7 + reasoningScore * 0.3)
+
+  let level = "Needs Work"
+  if (totalScore >= 85) level = "Excellent"
+  else if (totalScore >= 70) level = "Competent"
+  else if (totalScore >= 50) level = "Developing"
+
+  return {
+    totalScore,
+    level,
+    mustHitMatched,
+    reasoningMatched,
+    redFlagsPotentiallyMissed,
+    mustHitTotal: mustHit.length,
+    reasoningTotal: reasoning.length,
+  }
+}
+
 function RadarChart({ scores }) {
   const size = 320
   const center = size / 2
@@ -653,6 +708,10 @@ export default function App() {
   const [selectedResident, setSelectedResident] = useState("")
   const [selectedCaseKey, setSelectedCaseKey] = useState("")
 
+  const [facultyMode, setFacultyMode] = useState(false)
+  const [traineeAnswer, setTraineeAnswer] = useState("")
+  const [benchmarkResult, setBenchmarkResult] = useState(null)
+
   const [form, setForm] = useState(initialForm)
 
   const selectedCase = useMemo(
@@ -684,7 +743,7 @@ export default function App() {
     const style = document.createElement("style")
     style.innerHTML = `
       @media print {
-        button, input, select {
+        button, input, select, textarea {
           display: none !important;
         }
         .hide-print {
@@ -815,15 +874,21 @@ export default function App() {
     }
   }, [evaluations])
 
-  const domainChartData = domains.map((d) => ({
-    label: d.title,
-    value: cohortAnalytics.avgByDomain[d.key] ?? 0,
-  }))
+  const assignRandomCase = () => {
+    if (!universalCases.length) return
+    const randomIndex = Math.floor(Math.random() * universalCases.length)
+    const picked = universalCases[randomIndex]
 
-  const ratingChartData = Object.entries(cohortAnalytics.ratingCounts || {}).map(([label, value]) => ({
-    label,
-    value,
-  }))
+    setSelectedCaseKey(picked.key)
+    setForm((prev) => ({
+      ...prev,
+      caseName: picked.title,
+    }))
+    setFacultyMode(false)
+    setTraineeAnswer("")
+    setBenchmarkResult(null)
+    setStatusMessage(`Random case assigned: ${picked.title}`)
+  }
 
   const useSelectedCase = () => {
     if (!selectedCase) return
@@ -831,7 +896,23 @@ export default function App() {
       ...prev,
       caseName: selectedCase.title,
     }))
+    setBenchmarkResult(null)
+    setTraineeAnswer("")
     setStatusMessage(`Loaded case: ${selectedCase.title}`)
+  }
+
+  const runBenchmark = () => {
+    if (!selectedCase) {
+      alert("Select a case first.")
+      return
+    }
+    if (!traineeAnswer.trim()) {
+      alert("Enter trainee reasoning first.")
+      return
+    }
+
+    const result = benchmarkCaseAnswer(traineeAnswer, selectedCase)
+    setBenchmarkResult(result)
   }
 
   const handleField = (field, value) => {
@@ -851,9 +932,13 @@ export default function App() {
       evaluator: "",
       rotation: "",
       caseName: "",
-      scores: initialScores,
+      scores: { ...initialScores },
     })
+    setSelectedCaseKey("")
     setEditingId(null)
+    setFacultyMode(false)
+    setTraineeAnswer("")
+    setBenchmarkResult(null)
   }
 
   const submit = async () => {
@@ -873,6 +958,8 @@ export default function App() {
       submittedByRole: isEvaluator ? "evaluator" : "resident",
       universalCaseKey: selectedCaseKey || null,
       universalCaseTitle: selectedCase?.title || null,
+      traineeAnswer: traineeAnswer || null,
+      benchmarkResult: benchmarkResult || null,
     }
 
     try {
@@ -896,10 +983,13 @@ export default function App() {
       evaluator: record.evaluator || "",
       rotation: record.rotation || "",
       caseName: record.caseName || "",
-      scores: record.scores || initialScores,
+      scores: record.scores || { ...initialScores },
     })
     setSelectedCaseKey(record.universalCaseKey || "")
     setEditingId(record.id)
+    setTraineeAnswer(record.traineeAnswer || "")
+    setBenchmarkResult(record.benchmarkResult || null)
+    setFacultyMode(false)
     setStatusMessage("Loaded into form.")
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
@@ -1083,7 +1173,12 @@ export default function App() {
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <select
                 value={selectedCaseKey}
-                onChange={(e) => setSelectedCaseKey(e.target.value)}
+                onChange={(e) => {
+                  setSelectedCaseKey(e.target.value)
+                  setBenchmarkResult(null)
+                  setTraineeAnswer("")
+                  setFacultyMode(false)
+                }}
                 style={{
                   padding: 12,
                   borderRadius: 10,
@@ -1101,6 +1196,13 @@ export default function App() {
               </select>
 
               <button
+                onClick={assignRandomCase}
+                style={{ ...buttonBase, background: "#7c3aed" }}
+              >
+                Random Case
+              </button>
+
+              <button
                 onClick={useSelectedCase}
                 disabled={!selectedCase}
                 style={{
@@ -1109,6 +1211,17 @@ export default function App() {
                 }}
               >
                 Use This Case
+              </button>
+
+              <button
+                onClick={() => setFacultyMode((prev) => !prev)}
+                disabled={!selectedCase}
+                style={{
+                  ...buttonBase,
+                  background: facultyMode ? "#b45309" : "#334155",
+                }}
+              >
+                {facultyMode ? "Hide Faculty Answers" : "Show Faculty Answers"}
               </button>
             </div>
           </div>
@@ -1123,7 +1236,7 @@ export default function App() {
                 color: "#475569",
               }}
             >
-              Choose a case to display its vignette, reasoning map, must-hit points, and evaluator guide.
+              Choose a case to display its vignette. Faculty answers stay hidden until you turn them on.
             </div>
           ) : (
             <div style={{ display: "grid", gap: 14 }}>
@@ -1144,62 +1257,200 @@ export default function App() {
 
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-                  gap: 12,
+                  padding: 14,
+                  borderRadius: 12,
+                  background: "#ffffff",
+                  border: "1px solid #e2e8f0",
                 }}
               >
-                <div style={{ padding: 14, borderRadius: 12, background: "white", border: "1px solid #e2e8f0" }}>
-                  <h4 style={{ marginTop: 0 }}>Progressive Data</h4>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {selectedCase.progressiveData.map((item, idx) => (
-                      <div key={idx}>• {item}</div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ padding: 14, borderRadius: 12, background: "white", border: "1px solid #e2e8f0" }}>
-                  <h4 style={{ marginTop: 0 }}>Expected Reasoning Map</h4>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {selectedCase.reasoningMap.map((item, idx) => (
-                      <div key={idx}>• {item}</div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ padding: 14, borderRadius: 12, background: "white", border: "1px solid #e2e8f0" }}>
-                  <h4 style={{ marginTop: 0 }}>Must-Hit Points</h4>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {selectedCase.mustHit.map((item, idx) => (
-                      <div key={idx}>• {item}</div>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={{ padding: 14, borderRadius: 12, background: "#fef2f2", border: "1px solid #fecaca" }}>
-                  <h4 style={{ marginTop: 0 }}>Red-Flag Misses</h4>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {selectedCase.redFlags.map((item, idx) => (
-                      <div key={idx}>• {item}</div>
-                    ))}
-                  </div>
+                <h4 style={{ marginTop: 0 }}>Progressive Data</h4>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {selectedCase.progressiveData.map((item, idx) => (
+                    <div key={idx}>• {item}</div>
+                  ))}
                 </div>
               </div>
+
+              {facultyMode ? (
+                <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ padding: 14, borderRadius: 12, background: "white", border: "1px solid #e2e8f0" }}>
+                      <h4 style={{ marginTop: 0 }}>Expected Reasoning Map</h4>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selectedCase.reasoningMap.map((item, idx) => (
+                          <div key={idx}>• {item}</div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: 14, borderRadius: 12, background: "white", border: "1px solid #e2e8f0" }}>
+                      <h4 style={{ marginTop: 0 }}>Must-Hit Points</h4>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selectedCase.mustHit.map((item, idx) => (
+                          <div key={idx}>• {item}</div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ padding: 14, borderRadius: 12, background: "#fef2f2", border: "1px solid #fecaca" }}>
+                      <h4 style={{ marginTop: 0 }}>Red-Flag Misses</h4>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selectedCase.redFlags.map((item, idx) => (
+                          <div key={idx}>• {item}</div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: 14,
+                      borderRadius: 12,
+                      background: "#eff6ff",
+                      border: "1px solid #bfdbfe",
+                    }}
+                  >
+                    <h4 style={{ marginTop: 0 }}>Evaluator Guide</h4>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {selectedCase.evaluatorGuide.map((item, idx) => (
+                        <div key={idx}>• {item}</div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    background: "#fff7ed",
+                    border: "1px solid #fed7aa",
+                    color: "#7c2d12",
+                  }}
+                >
+                  Faculty answer mode is hidden. Trainees can reason through the case first before revealing the expected map.
+                </div>
+              )}
 
               <div
                 style={{
                   padding: 14,
                   borderRadius: 12,
-                  background: "#eff6ff",
-                  border: "1px solid #bfdbfe",
+                  background: "#f8fafc",
+                  border: "1px solid #cbd5e1",
                 }}
               >
-                <h4 style={{ marginTop: 0 }}>Evaluator Guide</h4>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {selectedCase.evaluatorGuide.map((item, idx) => (
-                    <div key={idx}>• {item}</div>
-                  ))}
+                <h4 style={{ marginTop: 0 }}>Case Benchmarking</h4>
+                <div style={{ color: "#475569", marginBottom: 10 }}>
+                  Enter the trainee’s reasoning or assessment, then compare it against the case benchmark.
                 </div>
+
+                <textarea
+                  rows={7}
+                  value={traineeAnswer}
+                  onChange={(e) => setTraineeAnswer(e.target.value)}
+                  placeholder="Paste or type the trainee reasoning here..."
+                  style={{
+                    width: "100%",
+                    padding: 12,
+                    borderRadius: 10,
+                    border: "1px solid #cbd5e1",
+                    background: "white",
+                    boxSizing: "border-box",
+                    marginBottom: 10,
+                  }}
+                />
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button onClick={runBenchmark} style={{ ...buttonBase, background: "#1d4ed8" }}>
+                    Run Benchmark
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTraineeAnswer("")
+                      setBenchmarkResult(null)
+                    }}
+                    style={{ ...buttonBase, background: "#64748b" }}
+                  >
+                    Clear Benchmark
+                  </button>
+                </div>
+
+                {benchmarkResult && (
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: "grid",
+                      gap: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: 12,
+                        borderRadius: 10,
+                        background: "white",
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      <strong>Benchmark Score:</strong> {benchmarkResult.totalScore}/100
+                      <br />
+                      <strong>Level:</strong> {benchmarkResult.level}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ padding: 12, borderRadius: 10, background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                        <strong>Matched Must-Hit Points</strong>
+                        <div style={{ marginTop: 8 }}>
+                          {benchmarkResult.mustHitMatched.length} / {benchmarkResult.mustHitTotal}
+                        </div>
+                        <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                          {benchmarkResult.mustHitMatched.length ? (
+                            benchmarkResult.mustHitMatched.map((item, idx) => <div key={idx}>• {item}</div>)
+                          ) : (
+                            <div>None matched yet.</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ padding: 12, borderRadius: 10, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+                        <strong>Matched Reasoning Steps</strong>
+                        <div style={{ marginTop: 8 }}>
+                          {benchmarkResult.reasoningMatched.length} / {benchmarkResult.reasoningTotal}
+                        </div>
+                        <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                          {benchmarkResult.reasoningMatched.length ? (
+                            benchmarkResult.reasoningMatched.map((item, idx) => <div key={idx}>• {item}</div>)
+                          ) : (
+                            <div>No reasoning steps matched yet.</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ padding: 12, borderRadius: 10, background: "#fef2f2", border: "1px solid #fecaca" }}>
+                        <strong>Potential Miss Areas</strong>
+                        <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                          {benchmarkResult.redFlagsPotentiallyMissed.length ? (
+                            benchmarkResult.redFlagsPotentiallyMissed.map((item, idx) => <div key={idx}>• {item}</div>)
+                          ) : (
+                            <div>No obvious miss areas detected.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1662,6 +1913,9 @@ export default function App() {
                           <div><strong>Score:</strong> {e.total || e.totalScore || 0}/24 {e.globalRating ? `· ${e.globalRating}` : ""}</div>
                           <div><strong>Date:</strong> {formatFirebaseDate(e.createdAt)}</div>
                           {e.universalCaseTitle && <div><strong>Universal case:</strong> {e.universalCaseTitle}</div>}
+                          {e.benchmarkResult?.totalScore !== undefined && (
+                            <div><strong>Benchmark:</strong> {e.benchmarkResult.totalScore}/100 · {e.benchmarkResult.level}</div>
+                          )}
                         </div>
 
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
