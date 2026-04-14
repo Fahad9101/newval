@@ -88,15 +88,6 @@ const domains = [
   },
 ]
 
-const initialScores = {
-  problemFraming: 0,
-  syndromeIdentification: 0,
-  differentialDiagnosis: 0,
-  dataInterpretation: 0,
-  anticipation: 0,
-  reassessment: 0,
-}
-
 const universalCases = [
   {
     key: "breathless-night",
@@ -105,21 +96,21 @@ const universalCases = [
     vignette:
       "68M with HTN, CAD presents with acute dyspnea at night, orthopnea, and mild chest tightness. No fever.",
     progressiveData: [
-      "Vitals: HR 105, BP 160/90, RR 26, SpO₂ 90% RA",
+      "Vitals: HR 105, BP 160/90, RR 26, SpO₂ 90% on room air",
       "Exam: Crackles bilaterally, mild JVP elevation",
-      "Labs: BNP ↑, Troponin mildly ↑",
+      "Labs: BNP elevated, troponin mildly elevated",
       "CXR: Bilateral interstitial opacities",
     ],
     reasoningMap: [
-      "Acute dyspnea → cardiopulmonary prioritization",
-      "No fever → infection less likely, but not excluded",
-      "Orthopnea + crackles → cardiac origin favored",
-      "Troponin mild ↑ → demand ischemia vs ACS",
+      "Acute dyspnea requires cardiopulmonary prioritization",
+      "No fever makes infection less likely, but not excluded",
+      "Orthopnea plus crackles favors cardiac origin",
+      "Mild troponin rise may reflect demand ischemia vs ACS",
     ],
     mustHit: [
-      "Problem representation: acute decompensated heart failure with possible ischemic trigger",
-      "Recognize troponin does not automatically equal ACS",
-      "Initiate oxygen, diuretics, and consider nitrates",
+      "Frame as acute decompensated heart failure with possible ischemic trigger",
+      "Recognize troponin does not automatically mean ACS",
+      "Start oxygen, diuretics, and consider nitrates",
     ],
     redFlags: [
       "Treating as pneumonia without reasoning",
@@ -127,9 +118,9 @@ const universalCases = [
       "Missing hypertensive pulmonary edema",
     ],
     evaluatorGuide: [
-      "Does the resident summarize the case in one sentence correctly?",
+      "Does the resident give a correct one-line summary?",
       "Do they prematurely anchor on infection?",
-      "Do they contextualize troponin?",
+      "Do they contextualize troponin appropriately?",
     ],
   },
   {
@@ -137,32 +128,32 @@ const universalCases = [
     title: "The Silent Drop",
     domainFocus: "Data Interpretation (Electrolytes & Acid-Base)",
     vignette:
-      "55F admitted for vomiting. Now weak and confused.",
+      "55F admitted for vomiting. She is now weak and confused.",
     progressiveData: [
       "K = 2.7",
       "HCO₃ = 36",
-      "Cl = low",
+      "Chloride low",
       "ABG: metabolic alkalosis",
-      "Urine Cl = low",
+      "Urine chloride low",
     ],
     reasoningMap: [
-      "Metabolic alkalosis → classify",
-      "Low urine chloride → chloride-responsive alkalosis",
-      "Cause → vomiting / volume contraction",
+      "Identify metabolic alkalosis first",
+      "Low urine chloride suggests chloride-responsive alkalosis",
+      "Vomiting plus volume contraction explains physiology",
     ],
     mustHit: [
       "Recognize contraction alkalosis",
-      "Treat with NS + KCl, not potassium alone",
-      "Understand physiology: RAAS activation and distal H⁺ secretion",
+      "Treat with normal saline plus KCl, not potassium alone",
+      "Explain RAAS activation and distal hydrogen loss",
     ],
     redFlags: [
-      "Giving only potassium",
+      "Giving potassium only",
       "Missing volume depletion",
-      "Not checking or using urine chloride",
+      "Ignoring urine chloride",
     ],
     evaluatorGuide: [
       "Does the resident use urine chloride correctly?",
-      "Do they understand mechanism or just memorize?",
+      "Do they explain mechanism rather than memorize?",
     ],
   },
   {
@@ -170,27 +161,27 @@ const universalCases = [
     title: "The Fever That Won’t Break",
     domainFocus: "Hypothesis Generation",
     vignette:
-      "72M with DM, persistent fever for 10 days despite antibiotics for presumed pneumonia.",
+      "72M with diabetes has persistent fever for 10 days despite antibiotics for presumed pneumonia.",
     progressiveData: [
-      "Blood cultures: negative",
-      "CT chest: improving infiltrate",
+      "Blood cultures negative",
+      "CT chest shows improving infiltrate",
       "CRP remains high",
-      "New murmur",
+      "New murmur now heard",
     ],
     reasoningMap: [
-      "Reframe the problem: persistent fever despite treatment",
-      "Expand differential: endocarditis, abscess, drug fever, malignancy",
-      "Treatment failure does not only mean wrong antibiotic",
+      "Reframe to persistent fever despite treatment",
+      "Expand differential beyond antibiotic failure",
+      "Consider endocarditis, abscess, drug fever, malignancy",
     ],
     mustHit: [
       "Change the clinical question",
-      "Order echocardiography for suspected endocarditis",
-      "Recognize treatment failure requires reframing",
+      "Order echocardiography for possible endocarditis",
+      "Recognize persistent fever needs reframing",
     ],
     redFlags: [
-      "Escalating antibiotics blindly",
-      "Not reframing the diagnosis",
-      "Missing endocarditis clue from new murmur",
+      "Blind antibiotic escalation",
+      "Failure to reframe diagnosis",
+      "Missing the murmur clue",
     ],
     evaluatorGuide: [
       "Does the resident step back and reframe?",
@@ -202,31 +193,31 @@ const universalCases = [
     title: "The Quiet Creatinine Rise",
     domainFocus: "Trend Interpretation + Anticipation",
     vignette:
-      "65F post-op day 2. Creatinine is rising.",
+      "65F is post-op day 2 and her creatinine is rising.",
     progressiveData: [
       "Cr: 90 → 130 → 180",
       "Urine output decreasing",
-      "FeNa: 0.8%",
-      "On ACEi + NSAIDs",
+      "FeNa 0.8%",
+      "On ACE inhibitor and NSAIDs",
     ],
     reasoningMap: [
-      "Classify AKI: prerenal vs intrinsic",
-      "Integrate medications: ACEi + NSAID + hypovolemia",
-      "Trend matters more than isolated value",
+      "Classify AKI and interpret trend",
+      "Integrate ACEi + NSAID + volume status",
+      "Prevent progression before severe AKI develops",
     ],
     mustHit: [
-      "Stop offending medications",
-      "Perform volume assessment",
-      "Anticipate progression and prevent severe AKI",
+      "Stop nephrotoxins",
+      "Assess volume status",
+      "Anticipate worsening kidney injury and complications",
     ],
     redFlags: [
-      "Ignoring the trend",
+      "Ignoring trend",
       "Over-relying on FeNa",
-      "Continuing nephrotoxins",
+      "Continuing offending medications",
     ],
     evaluatorGuide: [
-      "Does the resident act before severe AKI develops?",
-      "Do they integrate medications plus physiology?",
+      "Does the resident act early?",
+      "Do they integrate medications with physiology?",
     ],
   },
   {
@@ -234,12 +225,12 @@ const universalCases = [
     title: "The Chest Pain Trap",
     domainFocus: "Diagnostic Precision",
     vignette:
-      "45M with chest pain after stress. Sharp and worse with inspiration.",
+      "45M has chest pain after stress. It is sharp and worse with inspiration.",
     progressiveData: [
-      "ECG: normal",
-      "Troponin: normal",
-      "D-dimer: mildly elevated",
-      "CT: negative for PE",
+      "ECG normal",
+      "Troponin normal",
+      "D-dimer mildly elevated",
+      "CT negative for PE",
     ],
     reasoningMap: [
       "Avoid premature closure on ACS",
@@ -249,16 +240,16 @@ const universalCases = [
     mustHit: [
       "Recognize non-cardiac chest pain safely",
       "Avoid over-testing cascade",
-      "Keep diagnostic precision instead of reflex reassurance",
+      "De-escalate with reasoning, not reflex reassurance",
     ],
     redFlags: [
-      "Defensive medicine spiral",
-      "Labeling atypical as safe without reasoning",
+      "Defensive over-testing spiral",
+      "Calling atypical automatically safe",
       "Missing pericarditis clues",
     ],
     evaluatorGuide: [
-      "Does the resident avoid over-testing?",
-      "Can they safely de-escalate with reasoning?",
+      "Can the resident safely de-escalate?",
+      "Do they avoid the testing cascade?",
     ],
   },
   {
@@ -266,31 +257,31 @@ const universalCases = [
     title: "The Hidden Clot",
     domainFocus: "Risk Stratification + Systems Thinking",
     vignette:
-      "60F post orthopedic surgery, now tachycardic and mildly hypoxic.",
+      "60F after orthopedic surgery is now tachycardic and mildly hypoxic.",
     progressiveData: [
       "HR 110, SpO₂ 92%",
-      "Wells score: moderate",
+      "Wells score moderate",
       "D-dimer elevated",
-      "CT: segmental PE",
+      "CT shows segmental PE",
     ],
     reasoningMap: [
       "Identify provoked VTE",
-      "Risk stratify by hemodynamic stability and RV strain",
-      "Move from diagnosis to appropriate intensity of treatment",
+      "Risk stratify by hemodynamics and RV strain",
+      "Move from diagnosis to level of treatment intensity",
     ],
     mustHit: [
       "Start anticoagulation promptly",
       "Decide inpatient vs outpatient management",
-      "Plan treatment duration: provoked VTE ≈ 3 months",
+      "Plan finite duration for provoked VTE",
     ],
     redFlags: [
       "Delaying anticoagulation",
       "Over-escalating to thrombolysis",
-      "Missing postoperative risk context",
+      "Ignoring postoperative context",
     ],
     evaluatorGuide: [
       "Does the resident integrate risk, context, and management?",
-      "Or just react to imaging?",
+      "Or just react to the image result?",
     ],
   },
 ]
@@ -300,7 +291,14 @@ const initialForm = {
   evaluator: "",
   rotation: "",
   caseName: "",
-  scores: initialScores,
+  scores: {
+    problemFraming: 0,
+    syndromeIdentification: 0,
+    differentialDiagnosis: 0,
+    dataInterpretation: 0,
+    anticipation: 0,
+    reassessment: 0,
+  },
 }
 
 function getGlobalRating(total) {
@@ -489,11 +487,9 @@ function getTrendComments(comparison) {
   const stable = comparison.filter((x) => x.diff === 0).map((x) => x.title)
 
   const comments = []
-
   if (improving.length) comments.push(`Improving in ${improving.slice(0, 3).join(", ")}.`)
   if (declining.length) comments.push(`Decline noted in ${declining.slice(0, 3).join(", ")}.`)
   if (stable.length && comments.length === 0) comments.push(`Scores are currently stable across ${stable.slice(0, 3).join(", ")}.`)
-
   return comments
 }
 
@@ -655,16 +651,16 @@ export default function App() {
   const [dashboardSearch, setDashboardSearch] = useState("")
   const [ratingFilter, setRatingFilter] = useState("All")
   const [selectedResident, setSelectedResident] = useState("")
+  const [selectedCaseKey, setSelectedCaseKey] = useState("")
 
   const [form, setForm] = useState(initialForm)
 
-  useEffect(() => {
-const [selectedCaseKey, setSelectedCaseKey] = useState("")
+  const selectedCase = useMemo(
+    () => universalCases.find((c) => c.key === selectedCaseKey) || null,
+    [selectedCaseKey]
+  )
 
-const selectedCase = useMemo(() => {
-  return universalCases.find((c) => c.key === selectedCaseKey)
-}, [selectedCaseKey])
-    
+  useEffect(() => {
     const unsub = watchAuth((u) => {
       setUser(u)
       setIsEvaluator(Boolean(u?.email))
@@ -830,15 +826,14 @@ const selectedCase = useMemo(() => {
   }))
 
   const useSelectedCase = () => {
-  if (!selectedCase) return
+    if (!selectedCase) return
+    setForm((prev) => ({
+      ...prev,
+      caseName: selectedCase.title,
+    }))
+    setStatusMessage(`Loaded case: ${selectedCase.title}`)
+  }
 
-  setForm((prev) => ({
-    ...prev,
-    caseName: selectedCase.title,
-  }))
-  setStatusMessage(`Loaded case: ${selectedCase.title}`)
-}
-  
   const handleField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
@@ -876,6 +871,8 @@ const selectedCase = useMemo(() => {
       residentEmail: residentEmail || null,
       submittedBy: user?.email || "resident-anonymous",
       submittedByRole: isEvaluator ? "evaluator" : "resident",
+      universalCaseKey: selectedCaseKey || null,
+      universalCaseTitle: selectedCase?.title || null,
     }
 
     try {
@@ -901,6 +898,7 @@ const selectedCase = useMemo(() => {
       caseName: record.caseName || "",
       scores: record.scores || initialScores,
     })
+    setSelectedCaseKey(record.universalCaseKey || "")
     setEditingId(record.id)
     setStatusMessage("Loaded into form.")
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -1068,6 +1066,144 @@ const selectedCase = useMemo(() => {
             {statusMessage}
           </div>
         )}
+
+        <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              alignItems: "center",
+              marginBottom: 14,
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 20 }}>Universal Internal Medicine Case Library</h2>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <select
+                value={selectedCaseKey}
+                onChange={(e) => setSelectedCaseKey(e.target.value)}
+                style={{
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: "white",
+                  minWidth: 260,
+                }}
+              >
+                <option value="">Select a universal case</option>
+                {universalCases.map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={useSelectedCase}
+                disabled={!selectedCase}
+                style={{
+                  ...buttonBase,
+                  background: selectedCase ? "#0f766e" : "#94a3b8",
+                }}
+              >
+                Use This Case
+              </button>
+            </div>
+          </div>
+
+          {!selectedCase ? (
+            <div
+              style={{
+                padding: 12,
+                borderRadius: 10,
+                background: "white",
+                border: "1px solid #e2e8f0",
+                color: "#475569",
+              }}
+            >
+              Choose a case to display its vignette, reasoning map, must-hit points, and evaluator guide.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 14 }}>
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 12,
+                  background: "white",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <h3 style={{ marginTop: 0, marginBottom: 8 }}>{selectedCase.title}</h3>
+                <div style={{ marginBottom: 8, color: "#0f766e", fontWeight: 700 }}>
+                  Domain focus: {selectedCase.domainFocus}
+                </div>
+                <div>{selectedCase.vignette}</div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gap: 12,
+                }}
+              >
+                <div style={{ padding: 14, borderRadius: 12, background: "white", border: "1px solid #e2e8f0" }}>
+                  <h4 style={{ marginTop: 0 }}>Progressive Data</h4>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {selectedCase.progressiveData.map((item, idx) => (
+                      <div key={idx}>• {item}</div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ padding: 14, borderRadius: 12, background: "white", border: "1px solid #e2e8f0" }}>
+                  <h4 style={{ marginTop: 0 }}>Expected Reasoning Map</h4>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {selectedCase.reasoningMap.map((item, idx) => (
+                      <div key={idx}>• {item}</div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ padding: 14, borderRadius: 12, background: "white", border: "1px solid #e2e8f0" }}>
+                  <h4 style={{ marginTop: 0 }}>Must-Hit Points</h4>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {selectedCase.mustHit.map((item, idx) => (
+                      <div key={idx}>• {item}</div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ padding: 14, borderRadius: 12, background: "#fef2f2", border: "1px solid #fecaca" }}>
+                  <h4 style={{ marginTop: 0 }}>Red-Flag Misses</h4>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {selectedCase.redFlags.map((item, idx) => (
+                      <div key={idx}>• {item}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 12,
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                }}
+              >
+                <h4 style={{ marginTop: 0 }}>Evaluator Guide</h4>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {selectedCase.evaluatorGuide.map((item, idx) => (
+                    <div key={idx}>• {item}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         <div
           className="hide-print"
@@ -1334,15 +1470,21 @@ const selectedCase = useMemo(() => {
               >
                 <HorizontalBarChart
                   title="Average by Domain"
-                  data={domainChartData}
+                  data={domains.map((d) => ({
+                    label: d.title,
+                    value: cohortAnalytics.avgByDomain[d.key] ?? 0,
+                  }))}
                   maxValue={4}
                   color="#0c4a6e"
                   suffix="/4"
                 />
                 <HorizontalBarChart
                   title="Global Rating Distribution"
-                  data={ratingChartData}
-                  maxValue={Math.max(...ratingChartData.map((x) => x.value), 1)}
+                  data={Object.entries(cohortAnalytics.ratingCounts || {}).map(([label, value]) => ({
+                    label,
+                    value,
+                  }))}
+                  maxValue={Math.max(...Object.values(cohortAnalytics.ratingCounts || { a: 1 }), 1)}
                   color="#0f766e"
                 />
               </div>
@@ -1511,69 +1653,6 @@ const selectedCase = useMemo(() => {
                         border: "1px solid #e2e8f0",
                       }}
                     >
-<div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
-  <h2 style={{ marginTop: 0 }}>Universal Case Library</h2>
-
-  <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-    <select
-      value={selectedCaseKey}
-      onChange={(e) => setSelectedCaseKey(e.target.value)}
-      style={{
-        padding: 10,
-        borderRadius: 10,
-        border: "1px solid #cbd5e1",
-      }}
-    >
-      <option value="">Select case</option>
-      {universalCases.map((c) => (
-        <option key={c.key} value={c.key}>
-          {c.title}
-        </option>
-      ))}
-    </select>
-
-    <button
-      onClick={useSelectedCase}
-      style={{ ...buttonBase, background: "#0f766e" }}
-    >
-      Load Case
-    </button>
-  </div>
-
-  {selectedCase && (
-    <div style={{ display: "grid", gap: 10 }}>
-      <div><strong>Vignette:</strong> {selectedCase.vignette}</div>
-
-      <div>
-        <strong>Data:</strong>
-        {selectedCase.progressiveData.map((d, i) => (
-          <div key={i}>• {d}</div>
-        ))}
-      </div>
-
-      <div>
-        <strong>Reasoning:</strong>
-        {selectedCase.reasoningMap.map((d, i) => (
-          <div key={i}>• {d}</div>
-        ))}
-      </div>
-
-      <div>
-        <strong>Must-hit:</strong>
-        {selectedCase.mustHit.map((d, i) => (
-          <div key={i}>• {d}</div>
-        ))}
-      </div>
-
-      <div style={{ color: "red" }}>
-        <strong>Red flags:</strong>
-        {selectedCase.redFlags.map((d, i) => (
-          <div key={i}>• {d}</div>
-        ))}
-      </div>
-    </div>
-  )}
-</div>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                         <div>
                           <div><strong>Resident:</strong> {e.resident || "—"}</div>
@@ -1582,6 +1661,7 @@ const selectedCase = useMemo(() => {
                           <div><strong>Evaluator:</strong> {e.evaluator || "—"}</div>
                           <div><strong>Score:</strong> {e.total || e.totalScore || 0}/24 {e.globalRating ? `· ${e.globalRating}` : ""}</div>
                           <div><strong>Date:</strong> {formatFirebaseDate(e.createdAt)}</div>
+                          {e.universalCaseTitle && <div><strong>Universal case:</strong> {e.universalCaseTitle}</div>}
                         </div>
 
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
