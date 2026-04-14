@@ -93,6 +93,9 @@ const universalCases = [
     key: "breathless-night",
     title: "The Breathless Night",
     setting: "Inpatient",
+    difficulty: 2,
+    isTrap: true,
+    trapMessage: "Troponin elevation does not automatically equal ACS. Interpret it in the clinical context.",
     domainFocus: "Problem Representation + Early Framing",
     targetDomains: ["problemFraming", "syndromeIdentification", "anticipation"],
     vignette:
@@ -129,6 +132,9 @@ const universalCases = [
     key: "silent-drop",
     title: "The Silent Drop",
     setting: "Inpatient",
+    difficulty: 4,
+    isTrap: false,
+    trapMessage: "",
     domainFocus: "Data Interpretation (Electrolytes & Acid-Base)",
     targetDomains: ["dataInterpretation", "syndromeIdentification"],
     vignette: "55F admitted for vomiting. She is now weak and confused.",
@@ -163,6 +169,9 @@ const universalCases = [
     key: "fever-wont-break",
     title: "The Fever That Won’t Break",
     setting: "Inpatient",
+    difficulty: 3,
+    isTrap: true,
+    trapMessage: "Persistent fever after antibiotics is not automatically antibiotic failure. Reframe the question.",
     domainFocus: "Hypothesis Generation",
     targetDomains: ["problemFraming", "reassessment", "differentialDiagnosis"],
     vignette:
@@ -197,6 +206,9 @@ const universalCases = [
     key: "quiet-creatinine-rise",
     title: "The Quiet Creatinine Rise",
     setting: "Inpatient",
+    difficulty: 3,
+    isTrap: true,
+    trapMessage: "Do not over-rely on FeNa alone. Trend, medications, and context matter more.",
     domainFocus: "Trend Interpretation + Anticipation",
     targetDomains: ["dataInterpretation", "anticipation", "reassessment"],
     vignette: "65F is post-op day 2 and her creatinine is rising.",
@@ -230,6 +242,9 @@ const universalCases = [
     key: "hidden-clot",
     title: "The Hidden Clot",
     setting: "Inpatient",
+    difficulty: 3,
+    isTrap: false,
+    trapMessage: "",
     domainFocus: "Risk Stratification + Systems Thinking",
     targetDomains: ["differentialDiagnosis", "anticipation", "problemFraming"],
     vignette:
@@ -264,6 +279,9 @@ const universalCases = [
     key: "delirium-night-shift",
     title: "The Delirium on Night Shift",
     setting: "Inpatient",
+    difficulty: 3,
+    isTrap: true,
+    trapMessage: "Agitation is not the diagnosis. The task is to recognize delirium and search for reversible causes.",
     domainFocus: "Reassessment + Dangerous Cause Search",
     targetDomains: ["reassessment", "differentialDiagnosis", "problemFraming"],
     vignette:
@@ -298,6 +316,9 @@ const universalCases = [
     key: "clinic-fatigue-anemia",
     title: "The Tired Clinic Patient",
     setting: "Outpatient",
+    difficulty: 2,
+    isTrap: false,
+    trapMessage: "",
     domainFocus: "Problem Representation + Initial Workup",
     targetDomains: ["problemFraming", "dataInterpretation"],
     vignette:
@@ -332,6 +353,9 @@ const universalCases = [
     key: "clinic-weight-loss-diabetes",
     title: "The Unintended Weight Loss",
     setting: "Outpatient",
+    difficulty: 3,
+    isTrap: true,
+    trapMessage: "Do not reduce this to routine diabetes follow-up. The weight loss changes the question and urgency.",
     domainFocus: "Differential Diagnosis + Prioritization",
     targetDomains: ["differentialDiagnosis", "problemFraming", "anticipation"],
     vignette:
@@ -366,6 +390,9 @@ const universalCases = [
     key: "clinic-edema-proteinuria",
     title: "The Swollen Ankles",
     setting: "Outpatient",
+    difficulty: 2,
+    isTrap: false,
+    trapMessage: "",
     domainFocus: "Syndrome Identification",
     targetDomains: ["syndromeIdentification", "dataInterpretation"],
     vignette:
@@ -400,6 +427,9 @@ const universalCases = [
     key: "clinic-chest-pain-followup",
     title: "The Chest Pain Follow-up",
     setting: "Outpatient",
+    difficulty: 3,
+    isTrap: true,
+    trapMessage: "Prior negative testing matters. Do not restart the whole testing cascade without a new reason.",
     domainFocus: "Diagnostic Precision + Safe De-escalation",
     targetDomains: ["differentialDiagnosis", "problemFraming", "anticipation"],
     vignette:
@@ -434,6 +464,9 @@ const universalCases = [
     key: "clinic-resistant-pressure",
     title: "The Difficult Blood Pressure Visit",
     setting: "Outpatient",
+    difficulty: 3,
+    isTrap: true,
+    trapMessage: "Uncontrolled clinic blood pressure is not automatically true resistant hypertension.",
     domainFocus: "Data Interpretation + Reframing",
     targetDomains: ["dataInterpretation", "problemFraming", "reassessment"],
     vignette:
@@ -468,6 +501,9 @@ const universalCases = [
     key: "clinic-high-calcium",
     title: "The Incidental High Calcium",
     setting: "Outpatient",
+    difficulty: 3,
+    isTrap: true,
+    trapMessage: "Not every elevated calcium needs emergency treatment. First determine severity, symptoms, and physiology.",
     domainFocus: "Problem Framing + Focused Differential",
     targetDomains: ["problemFraming", "dataInterpretation", "differentialDiagnosis"],
     vignette:
@@ -818,6 +854,58 @@ function getPatternTrackerData(evaluations, residentName) {
     repeatedWeaknesses,
     message,
   }
+}
+
+function detectWrongQuestion(answer) {
+  const a = normalizeText(answer)
+
+  const hasDiagnosisWords = /\bdiagnosis|acs|pneumonia|pe|sepsis|heart failure|mi|aki|siadh|delirium\b/.test(a)
+  const hasFramingWords = /\bproblem|question|cause|why|syndrome|this is|frame|likely represents\b/.test(a)
+
+  if (hasDiagnosisWords && !hasFramingWords) {
+    return "⚠️ You jumped to diagnosis without clearly defining the clinical question."
+  }
+
+  if (!hasFramingWords) {
+    return "⚠️ No clear clinical question identified."
+  }
+
+  return null
+}
+
+function getReasoningFeedback(answer) {
+  const a = normalizeText(answer)
+  const feedback = []
+
+  if (!/\bbecause|due to|suggests|consistent with|therefore\b/.test(a)) {
+    feedback.push("⚠️ No explicit explanation of reasoning.")
+  }
+
+  if (!/\brisk|next|anticipate|plan|monitor|watch for|prevent\b/.test(a)) {
+    feedback.push("⚠️ No anticipation of next steps or complications.")
+  }
+
+  if (!/\bmost likely|priority|first|top|main\b/.test(a)) {
+    feedback.push("⚠️ No clear prioritization of differential or plan.")
+  }
+
+  if (/\btroponin\b/.test(a) && !/\bdemand|context|trend|ischemia\b/.test(a)) {
+    feedback.push("⚠️ Troponin mentioned without context interpretation.")
+  }
+
+  if (/\bd dimer|ddimer|d-dimer\b/.test(a) && !/\bpretest|probability|wells|context\b/.test(a)) {
+    feedback.push("⚠️ D-dimer mentioned without pretest probability context.")
+  }
+
+  if (!/\bsyndrome|pattern|represents\b/.test(a)) {
+    feedback.push("⚠️ Syndrome-level framing is weak or absent.")
+  }
+
+  if (feedback.length === 0) {
+    feedback.push("✅ Reasoning structure is solid.")
+  }
+
+  return feedback
 }
 
 function RadarChart({ scores }) {
@@ -1757,7 +1845,7 @@ export default function App() {
                 <option value="">Select a case</option>
                 {filteredCases.map((c) => (
                   <option key={c.key} value={c.key}>
-                    [{c.setting}] {c.title}
+                    [{c.setting}] L{c.difficulty} {c.title}
                   </option>
                 ))}
               </select>
@@ -1818,7 +1906,7 @@ export default function App() {
               >
                 <h3 style={{ marginTop: 0, marginBottom: 8 }}>{selectedCase.title}</h3>
                 <div style={{ marginBottom: 8, color: "#0f766e", fontWeight: 700 }}>
-                  Setting: {selectedCase.setting} · Domain focus: {selectedCase.domainFocus}
+                  Setting: {selectedCase.setting} · Difficulty: Level {selectedCase.difficulty} · Domain focus: {selectedCase.domainFocus}
                 </div>
                 <div>{selectedCase.vignette}</div>
               </div>
@@ -2011,7 +2099,55 @@ export default function App() {
                       <strong>Benchmark Score:</strong> {benchmarkResult.totalScore}/100
                       <br />
                       <strong>Level:</strong> {benchmarkResult.level}
+                      <br />
+                      <strong>Difficulty:</strong> Level {selectedCase?.difficulty}
                     </div>
+
+                    {detectWrongQuestion(traineeAnswer) && (
+                      <div
+                        style={{
+                          padding: 12,
+                          borderRadius: 10,
+                          background: "#fef2f2",
+                          border: "1px solid #fecaca",
+                          color: "#991b1b",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {detectWrongQuestion(traineeAnswer)}
+                      </div>
+                    )}
+
+                    <div
+                      style={{
+                        padding: 12,
+                        borderRadius: 10,
+                        background: "#f0fdf4",
+                        border: "1px solid #bbf7d0",
+                      }}
+                    >
+                      <strong>Reasoning Feedback</strong>
+                      <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                        {getReasoningFeedback(traineeAnswer).map((f, i) => (
+                          <div key={i}>• {f}</div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {selectedCase?.isTrap && (
+                      <div
+                        style={{
+                          padding: 12,
+                          borderRadius: 10,
+                          background: "#fff7ed",
+                          border: "1px solid #fed7aa",
+                          color: "#7c2d12",
+                          fontWeight: 600,
+                        }}
+                      >
+                        ⚠️ Trap Case: {selectedCase.trapMessage}
+                      </div>
+                    )}
 
                     <div
                       style={{
