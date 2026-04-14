@@ -545,12 +545,25 @@ const initialScores = {
   reassessment: 0,
 }
 
+const initialWhatChanged = {
+  clinicalStatus: "",
+  overnightEvents: "",
+  vitalsTrend: "",
+  labsTrend: "",
+  imagingProcedures: "",
+  consultantChanges: "",
+  dischargeBarriers: "",
+  stillOnEDD: "unknown",
+}
+
 const initialForm = {
   resident: "",
   evaluator: "",
   rotation: "",
   caseName: "",
   scores: initialScores,
+  whatChanged: initialWhatChanged,
+  structuredReasoning: "",
 }
 
 function getGlobalRating(total) {
@@ -908,6 +921,77 @@ function getReasoningFeedback(answer) {
   return feedback
 }
 
+function buildStructuredReasoning(text = "") {
+  const cleaned = text.replace(/\s+/g, " ").trim()
+  if (!cleaned) return ""
+
+  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean)
+  const take = (index, fallback) => sentences[index] || fallback
+
+  const problem =
+    /question|frame|represents|problem|syndrome/i.test(cleaned)
+      ? take(0, "Clinical question: —")
+      : `Clinical question: ${take(0, cleaned)}`
+
+  const syndrome =
+    /syndrome|physiology|pattern|heart failure|aki|pe|delirium|alkalosis|anemia/i.test(cleaned)
+      ? take(1, "Syndrome / physiology: —")
+      : "Syndrome / physiology: —"
+
+  const differential =
+    /differential|consider|likely|vs|because/i.test(cleaned)
+      ? take(2, "Differential / priority diagnosis: —")
+      : "Differential / priority diagnosis: —"
+
+  const data =
+    /lab|labs|troponin|creatinine|xray|cxr|ct|trend|vitals|data/i.test(cleaned)
+      ? take(3, "Data interpretation: —")
+      : "Data interpretation: —"
+
+  const anticipation =
+    /plan|monitor|watch|prevent|risk|next/i.test(cleaned)
+      ? take(4, "Anticipation / next 12–24h: —")
+      : "Anticipation / next 12–24h: —"
+
+  const reassessment = take(5, "Reassessment trigger: what new data would change the model?")
+
+  return [
+    "1) Problem framing",
+    problem,
+    "",
+    "2) Syndrome / physiology",
+    syndrome,
+    "",
+    "3) Differential / priority diagnosis",
+    differential,
+    "",
+    "4) Data interpretation",
+    data,
+    "",
+    "5) Anticipation / next steps",
+    anticipation,
+    "",
+    "6) Reassessment trigger",
+    reassessment,
+  ].join("\n")
+}
+
+function buildWhatChangedSummary(whatChanged = initialWhatChanged) {
+  const lines = []
+
+  if (whatChanged.clinicalStatus?.trim()) lines.push(`Clinical status: ${whatChanged.clinicalStatus.trim()}`)
+  if (whatChanged.overnightEvents?.trim()) lines.push(`What changed since yesterday / last 24h: ${whatChanged.overnightEvents.trim()}`)
+  if (whatChanged.vitalsTrend?.trim()) lines.push(`Vitals trend: ${whatChanged.vitalsTrend.trim()}`)
+  if (whatChanged.labsTrend?.trim()) lines.push(`Labs trend: ${whatChanged.labsTrend.trim()}`)
+  if (whatChanged.imagingProcedures?.trim()) lines.push(`Imaging / procedures: ${whatChanged.imagingProcedures.trim()}`)
+  if (whatChanged.consultantChanges?.trim()) lines.push(`Consultant / plan changes: ${whatChanged.consultantChanges.trim()}`)
+  if (whatChanged.dischargeBarriers?.trim()) lines.push(`Discharge barriers: ${whatChanged.dischargeBarriers.trim()}`)
+  if (whatChanged.stillOnEDD === "yes") lines.push("EDD status: still on expected discharge date")
+  if (whatChanged.stillOnEDD === "no") lines.push("EDD status: off expected discharge date")
+
+  return lines.join("\n")
+}
+
 function RadarChart({ scores }) {
   const size = 320
   const center = size / 2
@@ -957,6 +1041,102 @@ function RadarChart({ scores }) {
           return <circle key={key} cx={x} cy={y} r="4" fill="#0c4a6e" />
         })}
       </svg>
+    </div>
+  )
+}
+
+function RadarOverTime({ evaluations }) {
+  const recent = [...evaluations]
+    .sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+    .slice(-5)
+
+  if (!recent.length) {
+    return (
+      <div
+        style={{
+          padding: 12,
+          borderRadius: 10,
+          background: "white",
+          border: "1px solid #e2e8f0",
+          color: "#475569",
+        }}
+      >
+        No resident trend data yet.
+      </div>
+    )
+  }
+
+  const size = 340
+  const center = size / 2
+  const radius = 112
+  const levels = 4
+  const keys = domains.map((d) => d.key)
+  const seriesColors = ["#94a3b8", "#60a5fa", "#34d399", "#f59e0b", "#0c4a6e"]
+
+  const pointsForLevel = (level) =>
+    keys
+      .map((_, i) => {
+        const angle = (Math.PI * 2 * i) / keys.length - Math.PI / 2
+        const r = (radius * level) / levels
+        const x = center + Math.cos(angle) * r
+        const y = center + Math.sin(angle) * r
+        return `${x},${y}`
+      })
+      .join(" ")
+
+  const polygonPoints = (scores) =>
+    keys
+      .map((key, i) => {
+        const angle = (Math.PI * 2 * i) / keys.length - Math.PI / 2
+        const r = (radius * Number(scores?.[key] || 0)) / levels
+        const x = center + Math.cos(angle) * r
+        const y = center + Math.sin(angle) * r
+        return `${x},${y}`
+      })
+      .join(" ")
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          {[1, 2, 3, 4].map((level) => (
+            <polygon key={level} points={pointsForLevel(level)} fill="none" stroke="#d1d5db" strokeWidth="1" />
+          ))}
+          {keys.map((key, i) => {
+            const angle = (Math.PI * 2 * i) / keys.length - Math.PI / 2
+            const x = center + Math.cos(angle) * radius
+            const y = center + Math.sin(angle) * radius
+            return <line key={key} x1={center} y1={center} x2={x} y2={y} stroke="#d1d5db" strokeWidth="1" />
+          })}
+          {recent.map((evaluation, idx) => (
+            <polygon
+              key={evaluation.id || idx}
+              points={polygonPoints(evaluation.scores || {})}
+              fill="none"
+              stroke={seriesColors[idx] || "#0c4a6e"}
+              strokeWidth="2"
+            />
+          ))}
+        </svg>
+      </div>
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {recent.map((evaluation, idx) => (
+          <div key={`legend-${evaluation.id || idx}`} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: 4,
+                background: seriesColors[idx] || "#0c4a6e",
+              }}
+            />
+            <div style={{ fontSize: 13 }}>
+              {formatFirebaseDate(evaluation.createdAt) || `Evaluation ${idx + 1}`} · {evaluation.total || evaluation.totalScore || 0}/24
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -1098,6 +1278,11 @@ export default function App() {
     [evaluations, form.resident]
   )
 
+  const whatChangedSummary = useMemo(
+    () => buildWhatChangedSummary(form.whatChanged || initialWhatChanged),
+    [form.whatChanged]
+  )
+
   useEffect(() => {
     const unsub = watchAuth((u) => {
       setUser(u)
@@ -1181,8 +1366,12 @@ export default function App() {
         total,
         globalRating,
         priorities: priorityRecommendations,
-      }),
-    [form, total, globalRating, priorityRecommendations]
+      }) +
+      (form.structuredReasoning?.trim()
+        ? `\n\nStructured reasoning\n\n${form.structuredReasoning.trim()}`
+        : "") +
+      (whatChangedSummary ? `\n\nWhat changed since yesterday\n\n${whatChangedSummary}` : ""),
+    [form, total, globalRating, priorityRecommendations, whatChangedSummary]
   )
 
   const nonZeroScores = Object.values(form.scores).filter((v) => v > 0)
@@ -1467,6 +1656,22 @@ export default function App() {
     }))
   }
 
+  const handleWhatChanged = (field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      whatChanged: { ...(prev.whatChanged || initialWhatChanged), [field]: value },
+    }))
+  }
+
+  const autoFormatStructuredReasoning = () => {
+    if (!traineeAnswer.trim()) {
+      alert("Enter or dictate trainee reasoning first.")
+      return
+    }
+    handleField("structuredReasoning", buildStructuredReasoning(traineeAnswer))
+    setStatusMessage("Structured reasoning generated.")
+  }
+
   const resetForm = () => {
     stopVoiceTyping()
     setForm({
@@ -1475,6 +1680,8 @@ export default function App() {
       rotation: "",
       caseName: "",
       scores: { ...initialScores },
+      whatChanged: { ...initialWhatChanged },
+      structuredReasoning: "",
     })
     setSelectedCaseKey("")
     setCaseSettingFilter("All")
@@ -1488,8 +1695,8 @@ export default function App() {
   }
 
   const submit = async () => {
-    if (!form.resident && !form.caseName && total === 0) {
-      alert("Enter at least a resident name, case, or some assessment.")
+    if (!form.resident && !form.caseName && total === 0 && !traineeAnswer.trim() && !whatChangedSummary) {
+      alert("Enter at least a resident name, case, reasoning, or some assessment.")
       return
     }
 
@@ -1499,6 +1706,7 @@ export default function App() {
       globalRating,
       oneLineSummary,
       consultantReport,
+      whatChangedSummary,
       residentEmail: residentEmail || null,
       submittedBy: user?.email || "resident-anonymous",
       submittedByRole: isEvaluator ? "evaluator" : "resident",
@@ -1534,6 +1742,8 @@ export default function App() {
       rotation: record.rotation || "",
       caseName: record.caseName || "",
       scores: record.scores || { ...initialScores },
+      whatChanged: record.whatChanged || { ...initialWhatChanged },
+      structuredReasoning: record.structuredReasoning || "",
     })
     setSelectedCaseKey(record.universalCaseKey || "")
     setCaseSettingFilter(record.universalCaseSetting || "All")
@@ -2041,6 +2251,13 @@ export default function App() {
                   </button>
 
                   <button
+                    onClick={autoFormatStructuredReasoning}
+                    style={{ ...buttonBase, background: "#0f766e" }}
+                  >
+                    Auto-format Reasoning
+                  </button>
+
+                  <button
                     onClick={() => {
                       stopVoiceTyping()
                       setTraineeAnswer("")
@@ -2085,6 +2302,32 @@ export default function App() {
                     {speechError}
                   </div>
                 )}
+
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    borderRadius: 10,
+                    background: "white",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <h4 style={{ marginTop: 0 }}>Voice → Structured Reasoning</h4>
+                  <textarea
+                    rows={10}
+                    value={form.structuredReasoning || ""}
+                    onChange={(e) => handleField("structuredReasoning", e.target.value)}
+                    placeholder="Auto-structured reasoning will appear here."
+                    style={{
+                      width: "100%",
+                      padding: 12,
+                      borderRadius: 10,
+                      border: "1px solid #cbd5e1",
+                      background: "white",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
 
                 {benchmarkResult && (
                   <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
@@ -2327,6 +2570,117 @@ export default function App() {
           </div>
         )}
 
+        <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
+          <h2 style={{ marginTop: 0, fontSize: 20 }}>“What Changed Since Yesterday” Engine</h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <label><strong>Clinical status</strong></label>
+              <input
+                value={form.whatChanged?.clinicalStatus || ""}
+                onChange={(e) => handleWhatChanged("clinicalStatus", e.target.value)}
+                placeholder="Better / same / worse"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label><strong>Events in last 24h</strong></label>
+              <input
+                value={form.whatChanged?.overnightEvents || ""}
+                onChange={(e) => handleWhatChanged("overnightEvents", e.target.value)}
+                placeholder="New symptoms, procedures, instability"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label><strong>Vitals trend</strong></label>
+              <input
+                value={form.whatChanged?.vitalsTrend || ""}
+                onChange={(e) => handleWhatChanged("vitalsTrend", e.target.value)}
+                placeholder="Improved / stable / worsening"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label><strong>Labs trend</strong></label>
+              <input
+                value={form.whatChanged?.labsTrend || ""}
+                onChange={(e) => handleWhatChanged("labsTrend", e.target.value)}
+                placeholder="Creatinine up, CRP down, K corrected"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label><strong>Imaging / procedures</strong></label>
+              <input
+                value={form.whatChanged?.imagingProcedures || ""}
+                onChange={(e) => handleWhatChanged("imagingProcedures", e.target.value)}
+                placeholder="New CT, echo, line, drain, biopsy"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label><strong>Consultant / plan changes</strong></label>
+              <input
+                value={form.whatChanged?.consultantChanges || ""}
+                onChange={(e) => handleWhatChanged("consultantChanges", e.target.value)}
+                placeholder="Antibiotics changed, anticoag started"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label><strong>Discharge barriers</strong></label>
+              <input
+                value={form.whatChanged?.dischargeBarriers || ""}
+                onChange={(e) => handleWhatChanged("dischargeBarriers", e.target.value)}
+                placeholder="Pending IR, oxygen, social issue, placement"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label><strong>Still on EDD?</strong></label>
+              <select
+                value={form.whatChanged?.stillOnEDD || "unknown"}
+                onChange={(e) => handleWhatChanged("stillOnEDD", e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: 12,
+                  marginTop: 6,
+                  borderRadius: 10,
+                  border: "1px solid #cbd5e1",
+                  background: "white",
+                  boxSizing: "border-box",
+                }}
+              >
+                <option value="unknown">Not specified</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 10,
+              background: "white",
+              border: "1px solid #e2e8f0",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            <strong>Auto-summary</strong>
+            <div style={{ marginTop: 8, color: whatChangedSummary ? "#0f172a" : "#64748b" }}>
+              {whatChangedSummary || "Enter the fields above and the engine will build the update summary here."}
+            </div>
+          </div>
+        </div>
+
         {priorityRecommendations.length > 0 && (
           <div className="print-card" style={{ ...mutedCard, marginBottom: 18 }}>
             <h2 style={{ marginTop: 0, fontSize: 20 }}>Top 2 Priorities</h2>
@@ -2378,6 +2732,11 @@ export default function App() {
           <div className="print-card" style={sectionCard}>
             <h2 style={{ marginTop: 0, fontSize: 20 }}>Performance Radar</h2>
             <RadarChart scores={form.scores} />
+          </div>
+
+          <div className="print-card" style={sectionCard}>
+            <h2 style={{ marginTop: 0, fontSize: 20 }}>Radar Over Time</h2>
+            <RadarOverTime evaluations={residentData} />
           </div>
         </div>
 
@@ -2608,6 +2967,46 @@ export default function App() {
                 </div>
               )}
 
+              {residentData.length >= 2 && (
+                <div
+                  style={{
+                    marginBottom: 16,
+                    padding: 14,
+                    borderRadius: 12,
+                    background: "white",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  <h3 style={{ marginTop: 0 }}>Domain Trend Over Time</h3>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                      gap: 10,
+                    }}
+                  >
+                    {domains.map((domain) => {
+                      const latestValue = Number(latestResidentEval?.scores?.[domain.key] || 0)
+                      const firstValue = Number(firstResidentEval?.scores?.[domain.key] || 0)
+                      return (
+                        <div
+                          key={domain.key}
+                          style={{
+                            padding: 10,
+                            borderRadius: 10,
+                            background: "#f8fafc",
+                            border: "1px solid #e2e8f0",
+                          }}
+                        >
+                          <strong>{domain.title}</strong>
+                          <div style={{ marginTop: 6 }}>{firstValue} → {latestValue}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {filteredEvaluations.length === 0 ? (
                 <div
                   style={{
@@ -2645,6 +3044,8 @@ export default function App() {
                             <div><strong>Benchmark:</strong> {e.benchmarkResult.totalScore}/100 · {e.benchmarkResult.level}</div>
                           )}
                           {e.overrideCompleted && <div><strong>Consultant override:</strong> completed</div>}
+                          {e.whatChangedSummary && <div><strong>What changed:</strong> saved</div>}
+                          {e.structuredReasoning && <div><strong>Structured reasoning:</strong> saved</div>}
                         </div>
 
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
