@@ -1494,6 +1494,33 @@ export default function App() {
           </div>
         )}
 
+        <div
+          className="hide-print"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 12,
+            marginBottom: 18,
+          }}
+        >
+          <div>
+            <label><strong>Resident</strong></label>
+            <input value={form.resident} onChange={(e) => handleField("resident", e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label><strong>Evaluator</strong></label>
+            <input value={form.evaluator} onChange={(e) => handleField("evaluator", e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label><strong>Rotation</strong></label>
+            <input value={form.rotation} onChange={(e) => handleField("rotation", e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label><strong>Case</strong></label>
+            <input value={form.caseName} onChange={(e) => handleField("caseName", e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+
         <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
           <div
             style={{
@@ -1864,97 +1891,6 @@ export default function App() {
           )}
         </div>
 
-        <div
-          className="hide-print"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 12,
-            marginBottom: 18,
-          }}
-        >
-          <div>
-            <label><strong>Resident</strong></label>
-            <input value={form.resident} onChange={(e) => handleField("resident", e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <label><strong>Evaluator</strong></label>
-            <input value={form.evaluator} onChange={(e) => handleField("evaluator", e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <label><strong>Rotation</strong></label>
-            <input value={form.rotation} onChange={(e) => handleField("rotation", e.target.value)} style={inputStyle} />
-          </div>
-          <div>
-            <label><strong>Case</strong></label>
-            <input value={form.caseName} onChange={(e) => handleField("caseName", e.target.value)} style={inputStyle} />
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-            gap: 16,
-            marginBottom: 18,
-          }}
-        >
-          <div className="print-card" style={mutedCard}>
-            <h2 style={{ marginTop: 0, fontSize: 20 }}>Summary</h2>
-            <p style={{ margin: "8px 0" }}><strong>Total Score:</strong> {total} / 24</p>
-            {globalRating && <p style={{ margin: "8px 0" }}><strong>Global Rating:</strong> {globalRating}</p>}
-            {oneLineSummary && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: 12,
-                  borderRadius: 10,
-                  background: "white",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <strong>1-line summary:</strong> {oneLineSummary}
-              </div>
-            )}
-          </div>
-
-          <div className="print-card" style={sectionCard}>
-            <h2 style={{ marginTop: 0, fontSize: 20 }}>Performance Radar</h2>
-            <RadarChart scores={form.scores} />
-          </div>
-        </div>
-
-        <div className="hide-print" style={mutedCard}>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 16,
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ minWidth: 220, flex: 1 }}>
-              <h2 style={{ marginTop: 0, fontSize: 20 }}>Scan to Open CRFT</h2>
-              <div style={{ color: "#475569", marginBottom: 8 }}>
-                Residents can scan this QR code to open the tool directly on their phones.
-              </div>
-              <div style={{ fontSize: 13, color: "#0f172a", wordBreak: "break-all" }}>{appUrl}</div>
-            </div>
-
-            <div
-              style={{
-                background: "white",
-                padding: 12,
-                borderRadius: 12,
-                border: "1px solid #e2e8f0",
-              }}
-            >
-              <QRCodeSVG value={appUrl} size={150} bgColor="#ffffff" fgColor="#0f172a" level="M" />
-            </div>
-          </div>
-        </div>
-
         <div style={{ display: "grid", gap: 14, marginTop: 18, marginBottom: 18 }}>
           {domains.map((domain) => {
             const score = form.scores[domain.key]
@@ -2061,6 +1997,39 @@ export default function App() {
             </div>
           </div>
         )}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+            gap: 16,
+            marginBottom: 18,
+          }}
+        >
+          <div className="print-card" style={mutedCard}>
+            <h2 style={{ marginTop: 0, fontSize: 20 }}>Summary</h2>
+            <p style={{ margin: "8px 0" }}><strong>Total Score:</strong> {total} / 24</p>
+            {globalRating && <p style={{ margin: "8px 0" }}><strong>Global Rating:</strong> {globalRating}</p>}
+            {oneLineSummary && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 10,
+                  background: "white",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <strong>1-line summary:</strong> {oneLineSummary}
+              </div>
+            )}
+          </div>
+
+          <div className="print-card" style={sectionCard}>
+            <h2 style={{ marginTop: 0, fontSize: 20 }}>Performance Radar</h2>
+            <RadarChart scores={form.scores} />
+          </div>
+        </div>
 
         {consultantReport && (
           <div
@@ -2363,6 +2332,37 @@ export default function App() {
             </div>
           </>
         )}
+
+        <div className="hide-print" style={mutedCard}>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 16,
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ minWidth: 220, flex: 1 }}>
+              <h2 style={{ marginTop: 0, fontSize: 20 }}>Scan to Open CRFT</h2>
+              <div style={{ color: "#475569", marginBottom: 8 }}>
+                Residents can scan this QR code to open the tool directly on their phones.
+              </div>
+              <div style={{ fontSize: 13, color: "#0f172a", wordBreak: "break-all" }}>{appUrl}</div>
+            </div>
+
+            <div
+              style={{
+                background: "white",
+                padding: 12,
+                borderRadius: 12,
+                border: "1px solid #e2e8f0",
+              }}
+            >
+              <QRCodeSVG value={appUrl} size={150} bgColor="#ffffff" fgColor="#0f172a" level="M" />
+            </div>
+          </div>
+        </div>
 
         <div style={{ textAlign: "right", color: "green", fontSize: 12, marginTop: 18 }}>
           Developed for KFSHRC-J IM residents
