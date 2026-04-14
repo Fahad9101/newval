@@ -97,14 +97,6 @@ const initialScores = {
   reassessment: 0,
 }
 
-const initialForm = {
-  resident: "",
-  evaluator: "",
-  rotation: "",
-  caseName: "",
-  scores: initialScores,
-}
-
 const universalCases = [
   {
     key: "breathless-night",
@@ -302,6 +294,15 @@ const universalCases = [
     ],
   },
 ]
+
+const initialForm = {
+  resident: "",
+  evaluator: "",
+  rotation: "",
+  caseName: "",
+  scores: initialScores,
+}
+
 function getGlobalRating(total) {
   if (total === 0) return ""
   if (total <= 9) return "Junior"
@@ -658,6 +659,12 @@ export default function App() {
   const [form, setForm] = useState(initialForm)
 
   useEffect(() => {
+const [selectedCaseKey, setSelectedCaseKey] = useState("")
+
+const selectedCase = useMemo(() => {
+  return universalCases.find((c) => c.key === selectedCaseKey)
+}, [selectedCaseKey])
+    
     const unsub = watchAuth((u) => {
       setUser(u)
       setIsEvaluator(Boolean(u?.email))
@@ -822,6 +829,16 @@ export default function App() {
     value,
   }))
 
+  const useSelectedCase = () => {
+  if (!selectedCase) return
+
+  setForm((prev) => ({
+    ...prev,
+    caseName: selectedCase.title,
+  }))
+  setStatusMessage(`Loaded case: ${selectedCase.title}`)
+}
+  
   const handleField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
@@ -1494,6 +1511,69 @@ export default function App() {
                         border: "1px solid #e2e8f0",
                       }}
                     >
+<div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
+  <h2 style={{ marginTop: 0 }}>Universal Case Library</h2>
+
+  <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+    <select
+      value={selectedCaseKey}
+      onChange={(e) => setSelectedCaseKey(e.target.value)}
+      style={{
+        padding: 10,
+        borderRadius: 10,
+        border: "1px solid #cbd5e1",
+      }}
+    >
+      <option value="">Select case</option>
+      {universalCases.map((c) => (
+        <option key={c.key} value={c.key}>
+          {c.title}
+        </option>
+      ))}
+    </select>
+
+    <button
+      onClick={useSelectedCase}
+      style={{ ...buttonBase, background: "#0f766e" }}
+    >
+      Load Case
+    </button>
+  </div>
+
+  {selectedCase && (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div><strong>Vignette:</strong> {selectedCase.vignette}</div>
+
+      <div>
+        <strong>Data:</strong>
+        {selectedCase.progressiveData.map((d, i) => (
+          <div key={i}>• {d}</div>
+        ))}
+      </div>
+
+      <div>
+        <strong>Reasoning:</strong>
+        {selectedCase.reasoningMap.map((d, i) => (
+          <div key={i}>• {d}</div>
+        ))}
+      </div>
+
+      <div>
+        <strong>Must-hit:</strong>
+        {selectedCase.mustHit.map((d, i) => (
+          <div key={i}>• {d}</div>
+        ))}
+      </div>
+
+      <div style={{ color: "red" }}>
+        <strong>Red flags:</strong>
+        {selectedCase.redFlags.map((d, i) => (
+          <div key={i}>• {d}</div>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                         <div>
                           <div><strong>Resident:</strong> {e.resident || "—"}</div>
