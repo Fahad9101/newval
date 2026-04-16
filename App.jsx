@@ -23,13 +23,49 @@ const domains = [
   { key: "reassessment", title: "Reassessment" },
 ]
 
-const initialScores = {
-  problemFraming: 0,
-  syndromeIdentification: 0,
-  differentialDiagnosis: 0,
-  dataInterpretation: 0,
-  anticipation: 0,
-  reassessment: 0,
+const domainRubric = {
+  problemFraming: {
+    0: "Absent or only repeats symptoms.",
+    1: "Incorrect or fragmented framing.",
+    2: "Partial framing; misses acuity, context, or core decision problem.",
+    3: "Mostly correct framing with meaningful clinical direction.",
+    4: "Concise, complete, prioritized framing capturing acuity and decision problem.",
+  },
+  syndromeIdentification: {
+    0: "Absent.",
+    1: "Incorrect syndrome.",
+    2: "Vague physiology or incomplete syndrome.",
+    3: "Correct syndrome identified.",
+    4: "Correct syndrome plus physiologic integration.",
+  },
+  differentialDiagnosis: {
+    0: "Absent.",
+    1: "Narrow, random, or clearly flawed differential.",
+    2: "Some relevant options but poorly prioritized.",
+    3: "Relevant and prioritized differential.",
+    4: "Prioritized, physiologically coherent, includes dangerous alternatives.",
+  },
+  dataInterpretation: {
+    0: "Ignores key data.",
+    1: "Misinterprets important data.",
+    2: "Lists data without meaning.",
+    3: "Interprets key data correctly.",
+    4: "Integrates key data into a reasoning shift or narrowing.",
+  },
+  anticipation: {
+    0: "Absent.",
+    1: "Purely reactive.",
+    2: "Basic next step only.",
+    3: "Anticipates likely deterioration or next clinical issue.",
+    4: "Proactive prevention and conditional planning.",
+  },
+  reassessment: {
+    0: "Absent.",
+    1: "Static reasoning.",
+    2: "Minimal mention of reassessment.",
+    3: "Clear reassessment trigger or follow-up plan.",
+    4: "Dynamic reassessment tied to evolving clinical data.",
+  },
 }
 
 const pageWrap = {
@@ -39,7 +75,7 @@ const pageWrap = {
   fontFamily: "Arial, sans-serif",
   color: "#0f172a",
 }
-const container = { maxWidth: 1320, margin: "0 auto" }
+const container = { maxWidth: 1380, margin: "0 auto" }
 const card = { background: "#fff", border: "1px solid #dbe4ee", borderRadius: 16, padding: 18 }
 const inputStyle = {
   width: "100%",
@@ -67,6 +103,36 @@ const tabStyle = (active) => ({
   background: active ? "#0f4c81" : "#dbe4ee",
   color: active ? "white" : "#0f172a",
 })
+
+const initialScores = {
+  problemFraming: 0,
+  syndromeIdentification: 0,
+  differentialDiagnosis: 0,
+  dataInterpretation: 0,
+  anticipation: 0,
+  reassessment: 0,
+}
+
+const manualErrorTagOptions = [
+  "poor_problem_representation",
+  "premature_closure",
+  "weak_differential",
+  "data_misinterpretation",
+  "no_anticipation",
+  "weak_reassessment",
+  "syndrome_misidentification",
+  "fragmented_thinking",
+]
+
+function MetricCard({ label, value, subtext }) {
+  return (
+    <div style={{ ...card, padding: 16 }}>
+      <div style={{ fontSize: 13, color: "#475569", marginBottom: 8 }}>{label}</div>
+      <div style={{ fontSize: 30, fontWeight: 800 }}>{value}</div>
+      {subtext ? <div style={{ marginTop: 6, color: "#64748b", fontSize: 13 }}>{subtext}</div> : null}
+    </div>
+  )
+}
 
 function normalizeText(text = "") {
   return String(text)
@@ -135,7 +201,9 @@ function exportRowsAsCsv(filename, rows) {
 }
 
 function flattenEvaluation(e) {
-  const scores = e.scores || {}
+  const autoScores = e.autoScores || e.scores || {}
+  const manualScores = e.manualScores || {}
+  const calibration = e.calibration || {}
   return {
     residentId: e.residentId || e.resident || "",
     caseKey: e.universalCaseKey || "",
@@ -148,29 +216,32 @@ function flattenEvaluation(e) {
     timeSeconds: e.timeSeconds ?? "",
     confidence: e.confidence ?? "",
     leadingDiagnosis: e.leadingDiagnosis || "",
-    total: e.total ?? 0,
-    globalRating: e.globalRating || "",
-    problemFraming: scores.problemFraming ?? "",
-    syndromeIdentification: scores.syndromeIdentification ?? "",
-    differentialDiagnosis: scores.differentialDiagnosis ?? "",
-    dataInterpretation: scores.dataInterpretation ?? "",
-    anticipation: scores.anticipation ?? "",
-    reassessment: scores.reassessment ?? "",
-    errorTags: Array.isArray(e.errorTags) ? e.errorTags.join("; ") : "",
+    autoTotal: e.autoTotal ?? e.total ?? 0,
+    autoRating: e.autoRating || e.globalRating || "",
+    manualTotal: e.manualTotal ?? "",
+    manualRating: e.manualRating || "",
+    totalDifference: calibration.totalDifference ?? "",
+    agreementFlag: calibration.agreementFlag || "",
+    auto_problemFraming: autoScores.problemFraming ?? "",
+    auto_syndromeIdentification: autoScores.syndromeIdentification ?? "",
+    auto_differentialDiagnosis: autoScores.differentialDiagnosis ?? "",
+    auto_dataInterpretation: autoScores.dataInterpretation ?? "",
+    auto_anticipation: autoScores.anticipation ?? "",
+    auto_reassessment: autoScores.reassessment ?? "",
+    manual_problemFraming: manualScores.problemFraming ?? "",
+    manual_syndromeIdentification: manualScores.syndromeIdentification ?? "",
+    manual_differentialDiagnosis: manualScores.differentialDiagnosis ?? "",
+    manual_dataInterpretation: manualScores.dataInterpretation ?? "",
+    manual_anticipation: manualScores.anticipation ?? "",
+    manual_reassessment: manualScores.reassessment ?? "",
+    autoErrorTags: Array.isArray(e.autoErrorTags || e.errorTags) ? (e.autoErrorTags || e.errorTags).join("; ") : "",
+    manualErrorTags: Array.isArray(e.manualErrorTags) ? e.manualErrorTags.join("; ") : "",
     autoFeedback: e.autoFeedback || "",
+    manualFeedback: e.manualFeedback || "",
+    evaluator: e.evaluator || "",
     evaluatorNotes: e.evaluatorNotes || "",
     traineeAnswer: e.traineeAnswer || "",
   }
-}
-
-function MetricCard({ label, value, subtext }) {
-  return (
-    <div style={{ ...card, padding: 16 }}>
-      <div style={{ fontSize: 13, color: "#475569", marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 30, fontWeight: 800 }}>{value}</div>
-      {subtext ? <div style={{ marginTop: 6, color: "#64748b", fontSize: 13 }}>{subtext}</div> : null}
-    </div>
-  )
 }
 
 const universalCases = [
@@ -188,37 +259,13 @@ const universalCases = [
       "CXR: Bilateral interstitial opacities",
     ],
     rubric: {
-      problemFraming: [
-        ["acute", "acute decompensated", "sudden"],
-        ["cardiopulmonary", "cardiac", "heart failure", "pulmonary edema"],
-        ["orthopnea", "nocturnal dyspnea", "paroxysmal nocturnal dyspnea"],
-      ],
-      syndromeIdentification: [
-        ["acute decompensated heart failure", "pulmonary edema", "heart failure exacerbation"],
-        ["myocardial injury", "demand ischemia", "acs", "acute coronary syndrome"],
-      ],
-      differentialDiagnosis: [
-        ["heart failure", "pulmonary edema"],
-        ["acute coronary syndrome", "acs", "ischemia", "mi"],
-        ["pneumonia", "infection"],
-      ],
-      dataInterpretation: [
-        ["orthopnea"],
-        ["bnp"],
-        ["troponin", "demand ischemia", "context", "trend"],
-        ["cxr", "interstitial opacities", "pulmonary edema"],
-      ],
-      anticipation: [
-        ["oxygen", "nippv", "niv", "ventilation"],
-        ["diuresis", "diuretic", "furosemide"],
-        ["deterioration", "monitor", "worsening", "respiratory failure"],
-      ],
-      reassessment: [
-        ["response to diuresis", "reassess oxygen", "follow troponin", "trend troponin", "repeat ecg"],
-      ],
-      dangerousMisses: [
-        ["pneumonia only", "just pneumonia"],
-      ],
+      problemFraming: [["acute", "acute decompensated", "sudden"], ["cardiopulmonary", "cardiac", "heart failure", "pulmonary edema"], ["orthopnea", "nocturnal dyspnea"]],
+      syndromeIdentification: [["acute decompensated heart failure", "pulmonary edema", "heart failure exacerbation"], ["myocardial injury", "demand ischemia", "acs", "acute coronary syndrome"]],
+      differentialDiagnosis: [["heart failure", "pulmonary edema"], ["acute coronary syndrome", "acs", "ischemia"], ["pneumonia", "infection"]],
+      dataInterpretation: [["orthopnea"], ["bnp"], ["troponin", "demand ischemia", "context", "trend"], ["cxr", "interstitial opacities", "pulmonary edema"]],
+      anticipation: [["oxygen", "nippv", "niv"], ["diuresis", "diuretic", "furosemide"], ["deterioration", "monitor", "worsening"]],
+      reassessment: [["response to diuresis", "reassess oxygen", "follow troponin", "trend troponin", "repeat ecg"]],
+      dangerousMisses: [["pneumonia only", "just pneumonia"]],
       feedback: {
         anchor: "The key shift is moving from symptom description to acute cardiopulmonary syndrome with likely pulmonary edema.",
         emphasis: "Orthopnea, BNP, and interstitial opacities should push heart failure to the top while keeping ACS overlap in mind.",
@@ -231,42 +278,15 @@ const universalCases = [
     setting: "Inpatient",
     domainFocus: "Data Interpretation (Electrolytes & Acid-Base)",
     vignette: "55F admitted for vomiting. She is now weak and confused.",
-    progressiveData: [
-      "K = 2.7",
-      "HCO₃ = 36",
-      "Chloride low",
-      "ABG: metabolic alkalosis",
-      "Urine chloride low",
-    ],
+    progressiveData: ["K = 2.7", "HCO₃ = 36", "Chloride low", "ABG: metabolic alkalosis", "Urine chloride low"],
     rubric: {
-      problemFraming: [
-        ["metabolic alkalosis", "chloride responsive alkalosis"],
-        ["vomiting", "gi losses"],
-      ],
-      syndromeIdentification: [
-        ["chloride responsive metabolic alkalosis", "contraction alkalosis"],
-        ["hypokalemia"],
-      ],
-      differentialDiagnosis: [
-        ["vomiting"],
-        ["diuretic", "volume contraction"],
-      ],
-      dataInterpretation: [
-        ["urine chloride low", "low urine chloride"],
-        ["bicarbonate", "metabolic alkalosis"],
-        ["chloride responsive"],
-      ],
-      anticipation: [
-        ["normal saline", "saline"],
-        ["kcl", "potassium chloride"],
-        ["monitor potassium", "arrhythmia", "ecg"],
-      ],
-      reassessment: [
-        ["repeat electrolytes", "repeat abg", "trend bicarbonate"],
-      ],
-      dangerousMisses: [
-        ["potassium only", "replace potassium only"],
-      ],
+      problemFraming: [["metabolic alkalosis", "chloride responsive alkalosis"], ["vomiting", "gi losses"]],
+      syndromeIdentification: [["chloride responsive metabolic alkalosis", "contraction alkalosis"], ["hypokalemia"]],
+      differentialDiagnosis: [["vomiting"], ["diuretic", "volume contraction"]],
+      dataInterpretation: [["urine chloride low", "low urine chloride"], ["bicarbonate", "metabolic alkalosis"], ["chloride responsive"]],
+      anticipation: [["normal saline", "saline"], ["kcl", "potassium chloride"], ["monitor potassium", "arrhythmia"]],
+      reassessment: [["repeat electrolytes", "repeat abg", "trend bicarbonate"]],
+      dangerousMisses: [["potassium only", "replace potassium only"]],
       feedback: {
         anchor: "This is not just low potassium; the syndrome is chloride-responsive metabolic alkalosis from vomiting or volume contraction.",
         emphasis: "Urine chloride is the key pivot and treatment should include saline plus KCl, not potassium alone.",
@@ -279,40 +299,15 @@ const universalCases = [
     setting: "Inpatient",
     domainFocus: "Hypothesis Generation",
     vignette: "72M with diabetes has persistent fever for 10 days despite antibiotics for presumed pneumonia.",
-    progressiveData: [
-      "Blood cultures negative",
-      "CT chest shows improving infiltrate",
-      "CRP remains high",
-      "New murmur now heard",
-    ],
+    progressiveData: ["Blood cultures negative", "CT chest shows improving infiltrate", "CRP remains high", "New murmur now heard"],
     rubric: {
-      problemFraming: [
-        ["persistent fever", "fever despite treatment"],
-        ["reframe", "new question"],
-      ],
-      syndromeIdentification: [
-        ["persistent fever syndrome", "undiagnosed source", "ongoing inflammatory source"],
-      ],
-      differentialDiagnosis: [
-        ["endocarditis"],
-        ["abscess"],
-        ["drug fever", "malignancy"],
-      ],
-      dataInterpretation: [
-        ["improving infiltrate"],
-        ["new murmur"],
-        ["cultures negative"],
-      ],
-      anticipation: [
-        ["echocardiography", "echo", "tee"],
-        ["search source", "reassess diagnosis"],
-      ],
-      reassessment: [
-        ["change diagnosis", "reframe", "repeat assessment"],
-      ],
-      dangerousMisses: [
-        ["escalate antibiotics blindly", "just broaden antibiotics"],
-      ],
+      problemFraming: [["persistent fever", "fever despite treatment"], ["reframe", "new question"]],
+      syndromeIdentification: [["persistent fever syndrome", "undiagnosed source", "ongoing inflammatory source"]],
+      differentialDiagnosis: [["endocarditis"], ["abscess"], ["drug fever", "malignancy"]],
+      dataInterpretation: [["improving infiltrate"], ["new murmur"], ["cultures negative"]],
+      anticipation: [["echocardiography", "echo", "tee"], ["search source", "reassess diagnosis"]],
+      reassessment: [["change diagnosis", "reframe", "repeat assessment"]],
+      dangerousMisses: [["escalate antibiotics blindly", "just broaden antibiotics"]],
       feedback: {
         anchor: "Persistent fever after partial radiologic improvement demands reframing rather than automatic antibiotic escalation.",
         emphasis: "The new murmur is the clue that should push endocarditis or another hidden source higher.",
@@ -325,39 +320,15 @@ const universalCases = [
     setting: "Inpatient",
     domainFocus: "Trend Interpretation + Anticipation",
     vignette: "65F is post-op day 2 and her creatinine is rising.",
-    progressiveData: [
-      "Cr: 90 → 130 → 180",
-      "Urine output decreasing",
-      "FeNa 0.8%",
-      "On ACE inhibitor and NSAIDs",
-    ],
+    progressiveData: ["Cr: 90 → 130 → 180", "Urine output decreasing", "FeNa 0.8%", "On ACE inhibitor and NSAIDs"],
     rubric: {
-      problemFraming: [
-        ["aki", "acute kidney injury"],
-        ["postoperative", "post op"],
-      ],
-      syndromeIdentification: [
-        ["hemodynamic aki", "prerenal", "multifactorial aki"],
-      ],
-      differentialDiagnosis: [
-        ["volume depletion", "hypovolemia"],
-        ["ace inhibitor", "nsaid", "nephrotoxin"],
-      ],
-      dataInterpretation: [
-        ["creatinine trend", "rising creatinine"],
-        ["urine output decreasing"],
-        ["fena context", "do not over rely on fena"],
-      ],
-      anticipation: [
-        ["stop nephrotoxins", "hold ace", "stop nsaid"],
-        ["assess volume", "fluids", "monitor potassium"],
-      ],
-      reassessment: [
-        ["repeat creatinine", "monitor urine output", "reassess volume status"],
-      ],
-      dangerousMisses: [
-        ["ignore trend"],
-      ],
+      problemFraming: [["aki", "acute kidney injury"], ["postoperative", "post op"]],
+      syndromeIdentification: [["hemodynamic aki", "prerenal", "multifactorial aki"]],
+      differentialDiagnosis: [["volume depletion", "hypovolemia"], ["ace inhibitor", "nsaid", "nephrotoxin"]],
+      dataInterpretation: [["creatinine trend", "rising creatinine"], ["urine output decreasing"], ["fena context", "do not over rely on fena"]],
+      anticipation: [["stop nephrotoxins", "hold ace", "stop nsaid"], ["assess volume", "fluids", "monitor potassium"]],
+      reassessment: [["repeat creatinine", "monitor urine output", "reassess volume status"]],
+      dangerousMisses: [["ignore trend"]],
       feedback: {
         anchor: "The signal here is the trend, not one isolated lab or a reflex reading of FeNa.",
         emphasis: "Strong reasoning integrates trajectory, urine output, and medication exposures early enough to prevent progression.",
@@ -370,38 +341,15 @@ const universalCases = [
     setting: "Inpatient",
     domainFocus: "Risk Stratification + Systems Thinking",
     vignette: "60F after orthopedic surgery is now tachycardic and mildly hypoxic.",
-    progressiveData: [
-      "HR 110, SpO₂ 92%",
-      "Wells score moderate",
-      "D-dimer elevated",
-      "CT shows segmental PE",
-    ],
+    progressiveData: ["HR 110, SpO₂ 92%", "Wells score moderate", "D-dimer elevated", "CT shows segmental PE"],
     rubric: {
-      problemFraming: [
-        ["postoperative hypoxia", "provoked vte", "pe"],
-      ],
-      syndromeIdentification: [
-        ["pulmonary embolism", "provoked pe"],
-      ],
-      differentialDiagnosis: [
-        ["pe"],
-        ["post op atelectasis", "pneumonia"],
-      ],
-      dataInterpretation: [
-        ["ct pe", "segmental pe"],
-        ["post op risk", "provoked"],
-        ["wells", "pretest probability"],
-      ],
-      anticipation: [
-        ["anticoagulation"],
-        ["hemodynamics", "rv strain", "risk stratify"],
-      ],
-      reassessment: [
-        ["monitor oxygen", "monitor bleeding", "determine duration"],
-      ],
-      dangerousMisses: [
-        ["thrombolysis immediately", "lyse everyone"],
-      ],
+      problemFraming: [["postoperative hypoxia", "provoked vte", "pe"]],
+      syndromeIdentification: [["pulmonary embolism", "provoked pe"]],
+      differentialDiagnosis: [["pe"], ["post op atelectasis", "pneumonia"]],
+      dataInterpretation: [["ct pe", "segmental pe"], ["post op risk", "provoked"], ["wells", "pretest probability"]],
+      anticipation: [["anticoagulation"], ["hemodynamics", "rv strain", "risk stratify"]],
+      reassessment: [["monitor oxygen", "monitor bleeding", "determine duration"]],
+      dangerousMisses: [["thrombolysis immediately", "lyse everyone"]],
       feedback: {
         anchor: "This is provoked PE until proven otherwise, and the next job is risk stratification rather than panic escalation.",
         emphasis: "The best answers move quickly from diagnosis to anticoagulation intensity, hemodynamics, and planned duration.",
@@ -414,38 +362,15 @@ const universalCases = [
     setting: "Inpatient",
     domainFocus: "Reassessment + Dangerous Cause Search",
     vignette: "79M admitted for cellulitis becomes agitated and disoriented overnight.",
-    progressiveData: [
-      "Nurse notes fluctuating attention",
-      "Temp 37.9°C, HR 104",
-      "Bladder scan 700 mL",
-      "Medication list includes diphenhydramine and opioids",
-    ],
+    progressiveData: ["Nurse notes fluctuating attention", "Temp 37.9°C, HR 104", "Bladder scan 700 mL", "Medication list includes diphenhydramine and opioids"],
     rubric: {
-      problemFraming: [
-        ["delirium", "acute brain failure"],
-      ],
-      syndromeIdentification: [
-        ["hyperactive delirium", "delirium"],
-      ],
-      differentialDiagnosis: [
-        ["urinary retention"],
-        ["medication", "opioid", "diphenhydramine"],
-        ["infection", "pain", "hypoxia"],
-      ],
-      dataInterpretation: [
-        ["fluctuating attention"],
-        ["bladder scan 700", "retention"],
-      ],
-      anticipation: [
-        ["remove trigger", "stop offending meds"],
-        ["non pharmacologic", "reorient", "safety"],
-      ],
-      reassessment: [
-        ["after relieving retention", "reassess mental status"],
-      ],
-      dangerousMisses: [
-        ["dementia progression only", "just agitation"],
-      ],
+      problemFraming: [["delirium", "acute brain failure"]],
+      syndromeIdentification: [["hyperactive delirium", "delirium"]],
+      differentialDiagnosis: [["urinary retention"], ["medication", "opioid", "diphenhydramine"], ["infection", "pain", "hypoxia"]],
+      dataInterpretation: [["fluctuating attention"], ["bladder scan 700", "retention"]],
+      anticipation: [["remove trigger", "stop offending meds"], ["non pharmacologic", "reorient", "safety"]],
+      reassessment: [["after relieving retention", "reassess mental status"]],
+      dangerousMisses: [["dementia progression only", "just agitation"]],
       feedback: {
         anchor: "Agitation is not the diagnosis; fluctuating attention should trigger delirium framing immediately.",
         emphasis: "Retention and anticholinergic or opioid burden are common inpatient precipitants that must be searched for quickly.",
@@ -458,37 +383,15 @@ const universalCases = [
     setting: "Outpatient",
     domainFocus: "Problem Representation + Initial Workup",
     vignette: "34F presents with 3 months of fatigue, exertional dyspnea, and reduced exercise tolerance.",
-    progressiveData: [
-      "Hb 89 g/L",
-      "MCV 72",
-      "Ferritin low",
-      "Periods reported as heavy",
-    ],
+    progressiveData: ["Hb 89 g/L", "MCV 72", "Ferritin low", "Periods reported as heavy"],
     rubric: {
-      problemFraming: [
-        ["microcytic anemia", "iron deficiency anemia"],
-      ],
-      syndromeIdentification: [
-        ["iron deficiency"],
-      ],
-      differentialDiagnosis: [
-        ["heavy menses", "gynecologic bleeding"],
-        ["gi bleeding"],
-      ],
-      dataInterpretation: [
-        ["mcv 72", "microcytic"],
-        ["ferritin low"],
-      ],
-      anticipation: [
-        ["iron replacement"],
-        ["look for source", "bleeding source"],
-      ],
-      reassessment: [
-        ["repeat hemoglobin", "response to iron"],
-      ],
-      dangerousMisses: [
-        ["nonspecific fatigue only"],
-      ],
+      problemFraming: [["microcytic anemia", "iron deficiency anemia"]],
+      syndromeIdentification: [["iron deficiency"]],
+      differentialDiagnosis: [["heavy menses", "gynecologic bleeding"], ["gi bleeding"]],
+      dataInterpretation: [["mcv 72", "microcytic"], ["ferritin low"]],
+      anticipation: [["iron replacement"], ["look for source", "bleeding source"]],
+      reassessment: [["repeat hemoglobin", "response to iron"]],
+      dangerousMisses: [["nonspecific fatigue only"]],
       feedback: {
         anchor: "The syndrome here is chronic iron deficiency anemia, not generic fatigue.",
         emphasis: "Strong reasoning links microcytosis and low ferritin to source evaluation, especially bleeding history.",
@@ -501,37 +404,15 @@ const universalCases = [
     setting: "Outpatient",
     domainFocus: "Differential Diagnosis + Prioritization",
     vignette: "52M with polyuria, fatigue, and 7-kg unintentional weight loss over 4 months comes to clinic.",
-    progressiveData: [
-      "Random glucose 17.8 mmol/L",
-      "A1c 11.2%",
-      "No abdominal pain",
-      "BMI 24",
-    ],
+    progressiveData: ["Random glucose 17.8 mmol/L", "A1c 11.2%", "No abdominal pain", "BMI 24"],
     rubric: {
-      problemFraming: [
-        ["symptomatic hyperglycemia", "new uncontrolled diabetes"],
-        ["catabolic", "weight loss"],
-      ],
-      syndromeIdentification: [
-        ["symptomatic diabetes", "severe hyperglycemia"],
-      ],
-      differentialDiagnosis: [
-        ["type 2 diabetes"],
-        ["lada", "atypical diabetes"],
-      ],
-      dataInterpretation: [
-        ["a1c 11.2", "glucose 17.8"],
-        ["weight loss", "catabolic"],
-      ],
-      anticipation: [
-        ["prompt treatment", "same day escalation", "insulin", "urgent follow up"],
-      ],
-      reassessment: [
-        ["close follow up", "monitor response"],
-      ],
-      dangerousMisses: [
-        ["routine mild diabetes follow up only"],
-      ],
+      problemFraming: [["symptomatic hyperglycemia", "new uncontrolled diabetes"], ["catabolic", "weight loss"]],
+      syndromeIdentification: [["symptomatic diabetes", "severe hyperglycemia"]],
+      differentialDiagnosis: [["type 2 diabetes"], ["lada", "atypical diabetes"]],
+      dataInterpretation: [["a1c 11.2", "glucose 17.8"], ["weight loss", "catabolic"]],
+      anticipation: [["prompt treatment", "same day escalation", "insulin", "urgent follow up"]],
+      reassessment: [["close follow up", "monitor response"]],
+      dangerousMisses: [["routine mild diabetes follow up only"]],
       feedback: {
         anchor: "Weight loss changes this from routine outpatient diabetes to symptomatic catabolic hyperglycemia.",
         emphasis: "The best responses recognize urgency, think about treatment intensity, and do not trivialize the weight loss.",
@@ -544,38 +425,15 @@ const universalCases = [
     setting: "Outpatient",
     domainFocus: "Syndrome Identification",
     vignette: "48F presents with 2 months of leg swelling and frothy urine.",
-    progressiveData: [
-      "BP 148/92",
-      "Urinalysis: 4+ protein",
-      "Albumin low",
-      "Creatinine near baseline",
-    ],
+    progressiveData: ["BP 148/92", "Urinalysis: 4+ protein", "Albumin low", "Creatinine near baseline"],
     rubric: {
-      problemFraming: [
-        ["nephrotic syndrome"],
-      ],
-      syndromeIdentification: [
-        ["proteinuria", "nephrotic syndrome"],
-      ],
-      differentialDiagnosis: [
-        ["glomerular disease"],
-        ["secondary causes", "diabetes", "lupus"],
-      ],
-      dataInterpretation: [
-        ["4+ protein", "heavy proteinuria"],
-        ["low albumin"],
-        ["frothy urine"],
-      ],
-      anticipation: [
-        ["quantify proteinuria", "renal workup"],
-        ["thrombosis risk"],
-      ],
-      reassessment: [
-        ["repeat kidney function", "follow albumin"],
-      ],
-      dangerousMisses: [
-        ["venous insufficiency only"],
-      ],
+      problemFraming: [["nephrotic syndrome"]],
+      syndromeIdentification: [["proteinuria", "nephrotic syndrome"]],
+      differentialDiagnosis: [["glomerular disease"], ["secondary causes", "diabetes", "lupus"]],
+      dataInterpretation: [["4+ protein", "heavy proteinuria"], ["low albumin"], ["frothy urine"]],
+      anticipation: [["quantify proteinuria", "renal workup"], ["thrombosis risk"]],
+      reassessment: [["repeat kidney function", "follow albumin"]],
+      dangerousMisses: [["venous insufficiency only"]],
       feedback: {
         anchor: "Edema plus frothy urine plus low albumin is a syndrome-level pattern, not isolated leg swelling.",
         emphasis: "Correct reasoning names nephrotic syndrome early and then moves to cause, risk, and quantification.",
@@ -588,37 +446,15 @@ const universalCases = [
     setting: "Outpatient",
     domainFocus: "Diagnostic Precision + Safe De-escalation",
     vignette: "45M has intermittent chest pain after stress. It is sharp and worse with inspiration. He is seen in clinic after an unrevealing ED visit.",
-    progressiveData: [
-      "ECG normal",
-      "Troponin normal",
-      "CT negative for PE",
-      "Pain reproducible on palpation",
-    ],
+    progressiveData: ["ECG normal", "Troponin normal", "CT negative for PE", "Pain reproducible on palpation"],
     rubric: {
-      problemFraming: [
-        ["low risk chest pain", "non cardiac chest pain", "musculoskeletal chest pain"],
-      ],
-      syndromeIdentification: [
-        ["musculoskeletal", "chest wall pain"],
-      ],
-      differentialDiagnosis: [
-        ["musculoskeletal"],
-        ["acs low likelihood", "pe low likelihood"],
-      ],
-      dataInterpretation: [
-        ["reproducible pain"],
-        ["negative ecg", "negative troponin"],
-        ["negative ct pe"],
-      ],
-      anticipation: [
-        ["reassurance", "safety net", "return precautions"],
-      ],
-      reassessment: [
-        ["follow up if changes", "return if worsening"],
-      ],
-      dangerousMisses: [
-        ["restart full testing cascade", "anxiety only dismissively"],
-      ],
+      problemFraming: [["low risk chest pain", "non cardiac chest pain", "musculoskeletal chest pain"]],
+      syndromeIdentification: [["musculoskeletal", "chest wall pain"]],
+      differentialDiagnosis: [["musculoskeletal"], ["acs low likelihood", "pe low likelihood"]],
+      dataInterpretation: [["reproducible pain"], ["negative ecg", "negative troponin"], ["negative ct pe"]],
+      anticipation: [["reassurance", "safety net", "return precautions"]],
+      reassessment: [["follow up if changes", "return if worsening"]],
+      dangerousMisses: [["restart full testing cascade", "anxiety only dismissively"]],
       feedback: {
         anchor: "Prior negative testing matters; the task is safe de-escalation, not restarting the whole workup.",
         emphasis: "Reproducible pleuritic pain with negative ED testing should push musculoskeletal pain and safety-net counseling.",
@@ -626,6 +462,15 @@ const universalCases = [
     },
   },
 ]
+
+function computeDomainScore(hits, totalGroups) {
+  if (totalGroups === 0) return 0
+  const ratio = hits / totalGroups
+  if (hits === 0) return 1
+  if (ratio < 0.5) return 2
+  if (ratio < 1) return 3
+  return 4
+}
 
 function deriveErrors(caseDef, answer, leadingDiagnosis) {
   const combined = normalizeText(`${leadingDiagnosis} ${answer}`)
@@ -637,70 +482,80 @@ function deriveErrors(caseDef, answer, leadingDiagnosis) {
   return [...new Set(tags)]
 }
 
-function computeDomainScore(hits, totalGroups) {
-  if (totalGroups === 0) return 0
-  const ratio = hits / totalGroups
-  if (hits === 0) return 1
-  if (ratio < 0.5) return 2
-  if (ratio < 1) return 3
-  return 4
-}
-
 function autoScoreCase(caseDef, leadingDiagnosis, answer) {
   const combined = `${leadingDiagnosis} ${answer}`
   const rubric = caseDef.rubric
-  const result = {}
+  const scores = {}
   const hitSummary = {}
   for (const d of domains) {
     const groups = rubric[d.key] || []
     const { hits, matched } = countConceptHits(combined, groups)
-    result[d.key] = computeDomainScore(hits, groups.length)
+    scores[d.key] = computeDomainScore(hits, groups.length)
     hitSummary[d.key] = matched
   }
-
   const dangerousMiss = (rubric.dangerousMisses || []).some((group) => group.some((term) => includesAny(combined, [term])))
   if (dangerousMiss) {
-    result.differentialDiagnosis = Math.min(result.differentialDiagnosis, 2)
-    result.dataInterpretation = Math.min(result.dataInterpretation, 2)
+    scores.differentialDiagnosis = Math.min(scores.differentialDiagnosis, 2)
+    scores.dataInterpretation = Math.min(scores.dataInterpretation, 2)
   }
-
-  const total = Object.values(result).reduce((sum, n) => sum + n, 0)
+  const total = Object.values(scores).reduce((sum, n) => sum + n, 0)
   const errorTags = deriveErrors(caseDef, answer, leadingDiagnosis)
-  const missing = domains
-    .filter((d) => (rubric[d.key] || []).length > 0 && result[d.key] <= 2)
-    .map((d) => d.title)
-
+  const weakDomains = domains.filter((d) => scores[d.key] <= 2).map((d) => d.title)
   const autoFeedback = [
     rubric.feedback?.anchor || "",
     rubric.feedback?.emphasis || "",
-    missing.length ? `Priority improvement domains: ${missing.join(", ")}.` : "All major domains were represented.",
+    weakDomains.length ? `Priority improvement domains: ${weakDomains.join(", ")}.` : "All major domains were represented.",
   ].filter(Boolean).join(" ")
-
   return {
-    scores: result,
+    scores,
     total,
-    globalRating: getGlobalRating(total),
+    rating: getGlobalRating(total),
     errorTags,
     autoFeedback,
     hitSummary,
   }
 }
 
-function ResidentPortal(props) {
-  const {
-    residentId,
-    sessionConfig,
-    residentSessionCode,
-    setResidentSessionCode,
-    residentUnlocked,
-    unlockResidentSession,
-    releasedCase,
-    alreadySubmitted,
-    submitResidentAnswer,
-    handleLogout,
-    statusMessage,
-  } = props
+function buildManualFeedback(caseDef, manualScores, manualTags) {
+  const strong = domains.filter((d) => Number(manualScores[d.key] || 0) >= 3).map((d) => d.title)
+  const weak = domains.filter((d) => Number(manualScores[d.key] || 0) <= 2).map((d) => d.title)
+  return [
+    caseDef?.rubric?.feedback?.anchor || "",
+    strong.length ? `Strengths: ${strong.join(", ")}.` : "",
+    weak.length ? `Priority improvement domains: ${weak.join(", ")}.` : "",
+    manualTags.length ? `Key reasoning concerns: ${manualTags.join(", ")}.` : "",
+    caseDef?.rubric?.feedback?.emphasis || "",
+  ].filter(Boolean).join(" ")
+}
 
+function calibrationFrom(autoScores, manualScores, autoTotal, manualTotal) {
+  const domainDifferences = {}
+  let exactMatches = 0
+  for (const d of domains) {
+    const diff = Math.abs(Number(autoScores?.[d.key] || 0) - Number(manualScores?.[d.key] || 0))
+    domainDifferences[d.key] = diff
+    if (diff === 0) exactMatches += 1
+  }
+  const totalDifference = Math.abs(Number(autoTotal || 0) - Number(manualTotal || 0))
+  let agreementFlag = "low"
+  if (totalDifference <= 1 && exactMatches >= 4) agreementFlag = "high"
+  else if (totalDifference <= 3 && exactMatches >= 2) agreementFlag = "moderate"
+  return { domainDifferences, totalDifference, agreementFlag, exactMatchDomains: exactMatches }
+}
+
+function ResidentPortal({
+  residentId,
+  sessionConfig,
+  residentSessionCode,
+  setResidentSessionCode,
+  residentUnlocked,
+  unlockResidentSession,
+  releasedCase,
+  alreadySubmitted,
+  submitResidentAnswer,
+  handleLogout,
+  statusMessage,
+}) {
   const [answer, setAnswer] = useState("")
   const [leadingDiagnosis, setLeadingDiagnosis] = useState("")
   const [confidence, setConfidence] = useState(50)
@@ -784,7 +639,6 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState("")
   const [activeStaffTab, setActiveStaffTab] = useState("session")
   const [activeDirectorTab, setActiveDirectorTab] = useState("leadership")
-
   const [sessionEditorCode, setSessionEditorCode] = useState("")
   const [sessionEditorOpen, setSessionEditorOpen] = useState(false)
   const [sessionEditorCaseKey, setSessionEditorCaseKey] = useState("")
@@ -793,10 +647,10 @@ export default function App() {
   const [sessionEditorCaseIndex, setSessionEditorCaseIndex] = useState(1)
 
   const [selectedRecordId, setSelectedRecordId] = useState("")
-  const [overrideScores, setOverrideScores] = useState({ ...initialScores })
-  const [overrideNotes, setOverrideNotes] = useState("")
-  const [overrideEvaluator, setOverrideEvaluator] = useState("")
-  const [overrideErrorTags, setOverrideErrorTags] = useState([])
+  const [manualScores, setManualScores] = useState({ ...initialScores })
+  const [manualNotes, setManualNotes] = useState("")
+  const [manualEvaluator, setManualEvaluator] = useState("")
+  const [manualErrorTags, setManualErrorTags] = useState([])
 
   useEffect(() => {
     const unsub = watchAuth((u) => setUser(u))
@@ -836,38 +690,47 @@ export default function App() {
   const residentStartKey = `crft_started_${residentId}_${currentSession}_${releasedCaseKey}`
   const alreadySubmitted = Boolean(localStorage.getItem(residentSubmitKey))
 
-  const submittedRows = useMemo(
-    () => [...evaluations].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)),
-    [evaluations]
-  )
-
-  const leadershipMetrics = useMemo(() => {
-    const totalAssessments = evaluations.length
-    const totals = evaluations.map((e) => Number(e.total || 0))
-    const avgScore = totals.length ? (totals.reduce((a, b) => a + b, 0) / totals.length).toFixed(1) : "0.0"
-    const avgByDomain = domains.map((d) => {
-      const values = evaluations.map((e) => Number(e.scores?.[d.key] || 0))
-      const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0
-      return { key: d.key, title: d.title, avg: avg.toFixed(2) }
-    })
-    const weakest = [...avgByDomain].sort((a, b) => Number(a.avg) - Number(b.avg))[0]
-    const errorFrequency = {}
-    evaluations.forEach((e) => {
-      for (const tag of e.errorTags || []) errorFrequency[tag] = (errorFrequency[tag] || 0) + 1
-    })
-    const topErrors = Object.entries(errorFrequency).sort((a, b) => b[1] - a[1]).slice(0, 5)
-    return { totalAssessments, avgScore, weakest, avgByDomain, topErrors }
-  }, [evaluations])
-
   const selectedRecord = useMemo(
     () => evaluations.find((e) => e.id === selectedRecordId) || null,
     [evaluations, selectedRecordId]
   )
 
-  const overrideTotal = useMemo(
-    () => Object.values(overrideScores).reduce((sum, value) => sum + Number(value || 0), 0),
-    [overrideScores]
+  const manualTotal = useMemo(
+    () => Object.values(manualScores).reduce((sum, value) => sum + Number(value || 0), 0),
+    [manualScores]
   )
+
+  const submittedRows = useMemo(
+    () => [...evaluations].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)),
+    [evaluations]
+  )
+
+  const calibrationMetrics = useMemo(() => {
+    const rows = evaluations.filter((e) => e.manualScores && e.calibration)
+    if (!rows.length) return { n: 0, avgTotalDifference: "0.0", highAgreement: 0, avgDomainDiffs: {} }
+    const avgTotalDifference = (rows.reduce((sum, e) => sum + Number(e.calibration?.totalDifference || 0), 0) / rows.length).toFixed(1)
+    const highAgreement = rows.filter((e) => e.calibration?.agreementFlag === "high").length
+    const avgDomainDiffs = {}
+    for (const d of domains) {
+      avgDomainDiffs[d.key] = (
+        rows.reduce((sum, e) => sum + Number(e.calibration?.domainDifferences?.[d.key] || 0), 0) / rows.length
+      ).toFixed(2)
+    }
+    return { n: rows.length, avgTotalDifference, highAgreement, avgDomainDiffs }
+  }, [evaluations])
+
+  const leadershipMetrics = useMemo(() => {
+    const totalAssessments = evaluations.length
+    const autoTotals = evaluations.map((e) => Number(e.autoTotal ?? e.total ?? 0))
+    const avgAutoScore = autoTotals.length ? (autoTotals.reduce((a, b) => a + b, 0) / autoTotals.length).toFixed(1) : "0.0"
+    const avgByDomain = domains.map((d) => {
+      const values = evaluations.map((e) => Number((e.autoScores || e.scores || {})[d.key] || 0))
+      const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0
+      return { key: d.key, title: d.title, avg: avg.toFixed(2) }
+    })
+    const weakest = [...avgByDomain].sort((a, b) => Number(a.avg) - Number(b.avg))[0]
+    return { totalAssessments, avgAutoScore, weakest, avgByDomain }
+  }, [evaluations])
 
   const handleResidentLogin = async () => {
     try {
@@ -921,7 +784,7 @@ export default function App() {
     const auto = autoScoreCase(releasedCase, leadingDiagnosis, answer)
 
     const payload = {
-      recordType: "auto_scored_submission",
+      recordType: "dual_scored_submission",
       residentId,
       resident: residentId,
       residentLevel: residentId,
@@ -938,16 +801,28 @@ export default function App() {
       confidence: Number(confidence),
       timeSeconds: Math.max(1, Math.round((nowMs - startedAtMs) / 1000)),
       startedAt: new Date(startedAtMs),
-      scores: auto.scores,
-      total: auto.total,
-      globalRating: auto.globalRating,
-      errorTags: auto.errorTags,
+
+      autoScores: auto.scores,
+      autoTotal: auto.total,
+      autoRating: auto.rating,
+      autoErrorTags: auto.errorTags,
       autoFeedback: auto.autoFeedback,
       hitSummary: auto.hitSummary,
+
+      // backwards-compatible fields
+      scores: auto.scores,
+      total: auto.total,
+      globalRating: auto.rating,
+      errorTags: auto.errorTags,
+
+      manualScores: null,
+      manualTotal: null,
+      manualRating: null,
+      manualErrorTags: [],
+      manualFeedback: "",
+      calibration: null,
       evaluator: "",
       evaluatorNotes: "",
-      autoScored: true,
-      wasOverridden: false,
     }
 
     try {
@@ -979,40 +854,41 @@ export default function App() {
     }
   }
 
-  const loadForOverride = (record) => {
+  const loadForManualScoring = (record) => {
     setSelectedRecordId(record.id)
-    setOverrideScores({
-      problemFraming: Number(record.scores?.problemFraming || 0),
-      syndromeIdentification: Number(record.scores?.syndromeIdentification || 0),
-      differentialDiagnosis: Number(record.scores?.differentialDiagnosis || 0),
-      dataInterpretation: Number(record.scores?.dataInterpretation || 0),
-      anticipation: Number(record.scores?.anticipation || 0),
-      reassessment: Number(record.scores?.reassessment || 0),
-    })
-    setOverrideEvaluator(record.evaluator || user?.email || "")
-    setOverrideNotes(record.evaluatorNotes || "")
-    setOverrideErrorTags(Array.isArray(record.errorTags) ? record.errorTags : [])
-    setActiveStaffTab("override")
-    setStatusMessage("Loaded for override review.")
+    setManualScores(record.manualScores || { ...initialScores })
+    setManualNotes(record.evaluatorNotes || "")
+    setManualEvaluator(record.evaluator || user?.email || "")
+    setManualErrorTags(record.manualErrorTags || [])
+    setActiveStaffTab("manual")
+    setStatusMessage("Loaded for manual scoring.")
   }
 
-  const saveOverride = async () => {
+  const saveManualScoring = async () => {
     if (!selectedRecord) return alert("Load a submission first.")
+    const caseDef = universalCases.find((c) => c.key === selectedRecord.universalCaseKey)
+    const manualFeedback = buildManualFeedback(caseDef, manualScores, manualErrorTags)
+    const calibration = calibrationFrom(
+      selectedRecord.autoScores || selectedRecord.scores || {},
+      manualScores,
+      selectedRecord.autoTotal ?? selectedRecord.total ?? 0,
+      manualTotal
+    )
     try {
       await updateEvaluation(selectedRecord.id, {
-        scores: { ...overrideScores },
-        total: overrideTotal,
-        globalRating: getGlobalRating(overrideTotal),
-        evaluator: overrideEvaluator || user?.email || "",
-        evaluatorNotes: overrideNotes,
-        errorTags: overrideErrorTags,
-        wasOverridden: true,
-        recordType: "override_scored_submission",
+        manualScores: { ...manualScores },
+        manualTotal,
+        manualRating: getGlobalRating(manualTotal),
+        manualErrorTags,
+        manualFeedback,
+        evaluator: manualEvaluator || user?.email || "",
+        evaluatorNotes: manualNotes,
+        calibration,
       })
-      setStatusMessage("Override saved.")
+      setStatusMessage("Manual score and calibration saved.")
     } catch (e) {
       console.error(e)
-      alert("Failed to save override.")
+      alert("Failed to save manual scoring.")
     }
   }
 
@@ -1104,7 +980,7 @@ export default function App() {
         <div style={{ ...card, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div>
             <div style={{ fontWeight: 800 }}>{isEvaluator ? "Evaluator" : "Program Director"} · {user?.email || ""}</div>
-            <div style={{ marginTop: 6, color: "#64748b" }}>Session control, automatic scoring, overrides, logs, exports, and oversight.</div>
+            <div style={{ marginTop: 6, color: "#64748b" }}>Session control, dual scoring, calibration tracking, logs, exports, and oversight.</div>
           </div>
           <button type="button" onClick={handleLogout} style={{ ...buttonBase, background: "#475569" }}>Logout</button>
         </div>
@@ -1116,7 +992,7 @@ export default function App() {
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
               <button type="button" style={tabStyle(activeStaffTab === "session")} onClick={() => setActiveStaffTab("session")}>Session Control</button>
               <button type="button" style={tabStyle(activeStaffTab === "log")} onClick={() => setActiveStaffTab("log")}>Assessment Log</button>
-              <button type="button" style={tabStyle(activeStaffTab === "override")} onClick={() => setActiveStaffTab("override")}>Override Workspace</button>
+              <button type="button" style={tabStyle(activeStaffTab === "manual")} onClick={() => setActiveStaffTab("manual")}>Manual Scoring</button>
               <button type="button" style={tabStyle(activeStaffTab === "profiles")} onClick={() => setActiveStaffTab("profiles")}>Resident Profiles</button>
             </div>
 
@@ -1149,19 +1025,20 @@ export default function App() {
                             {formatFirebaseDate(e.createdAt)} · session {e.sessionCode || "—"} · day {e.sessionDay ?? "—"} · {e.phase || "—"} · case {e.caseIndex ?? "—"}
                           </div>
                           <div style={{ marginTop: 8 }}>
-                            <strong>Leading diagnosis:</strong> {e.leadingDiagnosis || "—"} · <strong>Confidence:</strong> {e.confidence ?? "—"}% · <strong>Time:</strong> {e.timeSeconds ?? "—"} sec
+                            <strong>Auto:</strong> {e.autoTotal ?? e.total ?? 0}/24 · {e.autoRating || e.globalRating || "—"}
+                            {e.manualTotal != null ? ` | Manual: ${e.manualTotal}/24 · ${e.manualRating || "—"}` : ""}
                           </div>
                           <div style={{ marginTop: 8 }}>
-                            <strong>Error tags:</strong> {(e.errorTags || []).join(", ") || "none"}
+                            <strong>Calibration:</strong> {e.calibration ? `${e.calibration.agreementFlag} agreement, total diff ${e.calibration.totalDifference}` : "not manually scored yet"}
                           </div>
                           <div style={{ marginTop: 10 }}><strong>Auto feedback:</strong> {e.autoFeedback || "—"}</div>
                         </div>
                         <div style={{ background: "#0f766e", color: "white", borderRadius: 999, padding: "8px 12px", fontWeight: 800 }}>
-                          {e.total || 0}/24 · {e.globalRating || "Unrated"}
+                          {e.autoTotal ?? e.total ?? 0}/24
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-                        <button type="button" onClick={() => loadForOverride(e)} style={{ ...buttonBase, background: "#2563eb" }}>Review / Override</button>
+                        <button type="button" onClick={() => loadForManualScoring(e)} style={{ ...buttonBase, background: "#2563eb" }}>Manual Score</button>
                         <button type="button" onClick={() => handleDeleteEvaluation(e.id)} style={{ ...buttonBase, background: "#dc2626" }}>Delete</button>
                       </div>
                     </div>
@@ -1170,57 +1047,81 @@ export default function App() {
               </div>
             )}
 
-            {activeStaffTab === "override" && (
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(360px,1.1fr) minmax(340px,0.9fr)", gap: 16 }}>
+            {activeStaffTab === "manual" && (
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(420px,1.1fr) minmax(420px,0.9fr)", gap: 16 }}>
                 <div style={card}>
-                  <h2 style={{ marginTop: 0 }}>Override Workspace</h2>
+                  <h2 style={{ marginTop: 0 }}>Manual Scoring Workspace</h2>
                   {!selectedRecord ? (
                     <div style={{ color: "#64748b" }}>Load a submission from the Assessment Log first.</div>
                   ) : (
                     <>
                       <div style={{ marginBottom: 8 }}><strong>Resident:</strong> {selectedRecord.residentId || selectedRecord.resident}</div>
                       <div style={{ marginBottom: 8 }}><strong>Case:</strong> {selectedRecord.caseName}</div>
-                      <div style={{ marginBottom: 8 }}><strong>Session day:</strong> {selectedRecord.sessionDay ?? "—"} · <strong>Phase:</strong> {selectedRecord.phase || "—"}</div>
                       <div style={{ marginBottom: 8 }}><strong>Leading diagnosis:</strong> {selectedRecord.leadingDiagnosis || "—"}</div>
                       <div style={{ marginBottom: 8 }}><strong>Confidence:</strong> {selectedRecord.confidence ?? "—"}% · <strong>Time:</strong> {selectedRecord.timeSeconds ?? "—"} sec</div>
                       <div style={{ marginTop: 12, fontWeight: 800 }}>Resident answer</div>
                       <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, whiteSpace: "pre-wrap" }}>{selectedRecord.traineeAnswer || "—"}</div>
-                      <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                        <div><strong>Auto total:</strong> {selectedRecord.total || 0}/24</div>
+
+                      <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div><strong>Auto total:</strong> {selectedRecord.autoTotal ?? selectedRecord.total ?? 0}/24</div>
                         <div style={{ marginTop: 6 }}><strong>Auto feedback:</strong> {selectedRecord.autoFeedback || "—"}</div>
                       </div>
-                      <div style={{ marginTop: 14 }}><label><strong>Evaluator</strong></label><input value={overrideEvaluator} onChange={(e) => setOverrideEvaluator(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} /></div>
-                      <div style={{ marginTop: 14 }}><label><strong>Evaluator notes</strong></label><textarea value={overrideNotes} onChange={(e) => setOverrideNotes(e.target.value)} style={{ ...textareaStyle, marginTop: 6, minHeight: 110 }} /></div>
+
+                      <div style={{ marginTop: 14 }}>
+                        <label><strong>Evaluator</strong></label>
+                        <input value={manualEvaluator} onChange={(e) => setManualEvaluator(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
+                      </div>
+
+                      <div style={{ marginTop: 14 }}>
+                        <label><strong>Evaluator notes</strong></label>
+                        <textarea value={manualNotes} onChange={(e) => setManualNotes(e.target.value)} style={{ ...textareaStyle, marginTop: 6, minHeight: 110 }} />
+                      </div>
                     </>
                   )}
                 </div>
 
                 <div style={card}>
-                  <h2 style={{ marginTop: 0 }}>Override Scores</h2>
-                  <div style={{ display: "grid", gap: 12 }}>
+                  <h2 style={{ marginTop: 0 }}>Anchored Manual Rubric</h2>
+                  <div style={{ display: "grid", gap: 14 }}>
                     {domains.map((d) => (
-                      <div key={d.key}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><strong>{d.title}</strong><span>{overrideScores[d.key]}/4</span></div>
-                        <select value={overrideScores[d.key]} onChange={(e) => setOverrideScores((prev) => ({ ...prev, [d.key]: Number(e.target.value) }))} style={inputStyle}>{[0,1,2,3,4].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+                      <div key={d.key} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                          <strong>{d.title}</strong>
+                          <span>{manualScores[d.key]}/4</span>
+                        </div>
+                        <select value={manualScores[d.key]} onChange={(e) => setManualScores((prev) => ({ ...prev, [d.key]: Number(e.target.value) }))} style={inputStyle}>
+                          {[0,1,2,3,4].map((n) => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <div style={{ marginTop: 10, fontSize: 13, color: "#475569", display: "grid", gap: 4 }}>
+                          {[0,1,2,3,4].map((n) => (
+                            <div key={n}><strong>{n}:</strong> {domainRubric[d.key][n]}</div>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
+
                   <div style={{ marginTop: 16 }}>
-                    <div style={{ fontWeight: 800, marginBottom: 8 }}>Override error tags</div>
+                    <div style={{ fontWeight: 800, marginBottom: 8 }}>Manual error tags</div>
                     <div style={{ display: "grid", gap: 8 }}>
-                      {["poor_problem_representation", "premature_closure", "weak_differential", "data_misinterpretation", "no_anticipation", "weak_reassessment"].map((tag) => (
+                      {manualErrorTagOptions.map((tag) => (
                         <label key={tag} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <input type="checkbox" checked={overrideErrorTags.includes(tag)} onChange={() => setOverrideErrorTags((prev) => prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag])} />
+                          <input type="checkbox" checked={manualErrorTags.includes(tag)} onChange={() => setManualErrorTags((prev) => prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag])} />
                           <span>{tag}</span>
                         </label>
                       ))}
                     </div>
                   </div>
+
                   <div style={{ marginTop: 18, padding: 14, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-                    <div><strong>Override total:</strong> {overrideTotal}/24</div>
-                    <div style={{ marginTop: 6 }}><strong>Rating:</strong> {getGlobalRating(overrideTotal)}</div>
+                    <div><strong>Manual total:</strong> {manualTotal}/24</div>
+                    <div style={{ marginTop: 6 }}><strong>Manual rating:</strong> {getGlobalRating(manualTotal)}</div>
+                    {selectedRecord?.calibration ? <div style={{ marginTop: 6 }}><strong>Existing calibration:</strong> {selectedRecord.calibration.agreementFlag} agreement</div> : null}
                   </div>
-                  <button type="button" onClick={saveOverride} style={{ ...buttonBase, background: "#0f766e", marginTop: 16, width: "100%" }}>Save Override</button>
+
+                  <button type="button" onClick={saveManualScoring} style={{ ...buttonBase, background: "#0f766e", marginTop: 16, width: "100%" }}>
+                    Save Manual Score + Calibration
+                  </button>
                 </div>
               </div>
             )}
@@ -1231,12 +1132,16 @@ export default function App() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 12 }}>
                   {["R1", "R2", "R3", "R4", "R5"].map((rid) => {
                     const rows = evaluations.filter((e) => (e.residentId || e.resident) === rid)
-                    const avg = rows.length ? (rows.reduce((sum, row) => sum + Number(row.total || 0), 0) / rows.length).toFixed(1) : "0.0"
+                    const avgAuto = rows.length ? (rows.reduce((sum, row) => sum + Number(row.autoTotal ?? row.total ?? 0), 0) / rows.length).toFixed(1) : "0.0"
+                    const avgManual = rows.filter((r) => r.manualTotal != null).length
+                      ? (rows.filter((r) => r.manualTotal != null).reduce((sum, row) => sum + Number(row.manualTotal || 0), 0) / rows.filter((r) => r.manualTotal != null).length).toFixed(1)
+                      : "—"
                     return (
                       <div key={rid} style={{ border: "1px solid #dbe4ee", borderRadius: 14, padding: 14 }}>
                         <div style={{ fontWeight: 800 }}>{rid}</div>
                         <div style={{ marginTop: 6 }}>Assessments: {rows.length}</div>
-                        <div>Average total: {avg}/24</div>
+                        <div>Avg auto: {avgAuto}/24</div>
+                        <div>Avg manual: {avgManual === "—" ? "—" : `${avgManual}/24`}</div>
                       </div>
                     )
                   })}
@@ -1258,9 +1163,9 @@ export default function App() {
               <div style={{ display: "grid", gap: 16 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 }}>
                   <MetricCard label="Total assessments" value={leadershipMetrics.totalAssessments} />
-                  <MetricCard label="Average CRFT score" value={`${leadershipMetrics.avgScore}/24`} />
-                  <MetricCard label="Weakest domain" value={leadershipMetrics.weakest?.title || "—"} subtext={leadershipMetrics.weakest ? `Average ${leadershipMetrics.weakest.avg}/4` : ""} />
-                  <MetricCard label="Top error tag" value={leadershipMetrics.topErrors[0]?.[0] || "—"} subtext={leadershipMetrics.topErrors[0] ? `n=${leadershipMetrics.topErrors[0][1]}` : ""} />
+                  <MetricCard label="Average auto CRFT" value={`${leadershipMetrics.avgAutoScore}/24`} />
+                  <MetricCard label="Weakest auto domain" value={leadershipMetrics.weakest?.title || "—"} subtext={leadershipMetrics.weakest ? `Average ${leadershipMetrics.weakest.avg}/4` : ""} />
+                  <MetricCard label="Calibration cases" value={calibrationMetrics.n} subtext={`Avg total diff ${calibrationMetrics.avgTotalDifference}`} />
                 </div>
               </div>
             )}
@@ -1268,7 +1173,7 @@ export default function App() {
             {activeDirectorTab === "intelligence" && (
               <div style={{ display: "grid", gap: 16 }}>
                 <div style={card}>
-                  <h2 style={{ marginTop: 0 }}>Program Intelligence</h2>
+                  <h2 style={{ marginTop: 0 }}>Auto-score Domain Means</h2>
                   <div style={{ display: "grid", gap: 12 }}>
                     {leadershipMetrics.avgByDomain.map((d) => {
                       const val = Number(d.avg)
@@ -1287,15 +1192,15 @@ export default function App() {
                 </div>
 
                 <div style={card}>
-                  <h2 style={{ marginTop: 0 }}>Most Common Error Tags</h2>
+                  <h2 style={{ marginTop: 0 }}>Calibration Summary</h2>
+                  <div style={{ marginBottom: 12 }}>High-agreement cases: <strong>{calibrationMetrics.highAgreement}</strong> / {calibrationMetrics.n}</div>
                   <div style={{ display: "grid", gap: 10 }}>
-                    {leadershipMetrics.topErrors.map(([tag, count]) => (
-                      <div key={tag} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #e2e8f0", paddingBottom: 8 }}>
-                        <strong>{tag}</strong>
-                        <span>{count}</span>
+                    {domains.map((d) => (
+                      <div key={d.key} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #e2e8f0", paddingBottom: 8 }}>
+                        <strong>{d.title}</strong>
+                        <span>Avg domain diff: {calibrationMetrics.avgDomainDiffs[d.key] || "0.00"}</span>
                       </div>
                     ))}
-                    {!leadershipMetrics.topErrors.length ? <div style={{ color: "#64748b" }}>No error tags yet.</div> : null}
                   </div>
                 </div>
               </div>
