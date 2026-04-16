@@ -23,6 +23,17 @@ const domains = [
   { key: "reassessment", title: "Reassessment" },
 ]
 
+const errorTagOptions = [
+  "poor_problem_representation",
+  "premature_closure",
+  "weak_differential",
+  "data_misinterpretation",
+  "no_anticipation",
+  "fragmented_thinking",
+  "weak_reassessment",
+  "syndrome_misidentification",
+]
+
 const initialScores = {
   problemFraming: 0,
   syndromeIdentification: 0,
@@ -38,8 +49,7 @@ const universalCases = [
     title: "The Breathless Night",
     setting: "Inpatient",
     domainFocus: "Problem Representation + Early Framing",
-    vignette:
-      "68M with HTN, CAD presents with acute dyspnea at night, orthopnea, and mild chest tightness. No fever.",
+    vignette: "68M with HTN, CAD presents with acute dyspnea at night, orthopnea, and mild chest tightness. No fever.",
     progressiveData: [
       "Vitals: HR 105, BP 160/90, RR 26, SpO₂ 90% on room air",
       "Exam: Crackles bilaterally, mild JVP elevation",
@@ -53,27 +63,15 @@ const universalCases = [
     setting: "Inpatient",
     domainFocus: "Data Interpretation (Electrolytes & Acid-Base)",
     vignette: "55F admitted for vomiting. She is now weak and confused.",
-    progressiveData: [
-      "K = 2.7",
-      "HCO₃ = 36",
-      "Chloride low",
-      "ABG: metabolic alkalosis",
-      "Urine chloride low",
-    ],
+    progressiveData: ["K = 2.7", "HCO₃ = 36", "Chloride low", "ABG: metabolic alkalosis", "Urine chloride low"],
   },
   {
     key: "fever-wont-break",
     title: "The Fever That Won’t Break",
     setting: "Inpatient",
     domainFocus: "Hypothesis Generation",
-    vignette:
-      "72M with diabetes has persistent fever for 10 days despite antibiotics for presumed pneumonia.",
-    progressiveData: [
-      "Blood cultures negative",
-      "CT chest shows improving infiltrate",
-      "CRP remains high",
-      "New murmur now heard",
-    ],
+    vignette: "72M with diabetes has persistent fever for 10 days despite antibiotics for presumed pneumonia.",
+    progressiveData: ["Blood cultures negative", "CT chest shows improving infiltrate", "CRP remains high", "New murmur now heard"],
   },
   {
     key: "quiet-creatinine-rise",
@@ -81,12 +79,7 @@ const universalCases = [
     setting: "Inpatient",
     domainFocus: "Trend Interpretation + Anticipation",
     vignette: "65F is post-op day 2 and her creatinine is rising.",
-    progressiveData: [
-      "Cr: 90 → 130 → 180",
-      "Urine output decreasing",
-      "FeNa 0.8%",
-      "On ACE inhibitor and NSAIDs",
-    ],
+    progressiveData: ["Cr: 90 → 130 → 180", "Urine output decreasing", "FeNa 0.8%", "On ACE inhibitor and NSAIDs"],
   },
   {
     key: "hidden-clot",
@@ -94,26 +87,7 @@ const universalCases = [
     setting: "Inpatient",
     domainFocus: "Risk Stratification + Systems Thinking",
     vignette: "60F after orthopedic surgery is now tachycardic and mildly hypoxic.",
-    progressiveData: [
-      "HR 110, SpO₂ 92%",
-      "Wells score moderate",
-      "D-dimer elevated",
-      "CT shows segmental PE",
-    ],
-  },
-  {
-    key: "delirium-night-shift",
-    title: "The Delirium on Night Shift",
-    setting: "Inpatient",
-    domainFocus: "Reassessment + Dangerous Cause Search",
-    vignette:
-      "79M admitted for cellulitis becomes agitated and disoriented overnight.",
-    progressiveData: [
-      "Nurse notes fluctuating attention",
-      "Temp 37.9°C, HR 104",
-      "Bladder scan 700 mL",
-      "Medication list includes diphenhydramine and opioids",
-    ],
+    progressiveData: ["HR 110, SpO₂ 92%", "Wells score moderate", "D-dimer elevated", "CT shows segmental PE"],
   },
 ]
 
@@ -140,13 +114,12 @@ function exportRowsAsCsv(filename, rows) {
   const headers = Object.keys(rows[0])
   const escapeCell = (value) => {
     const text = value == null ? "" : String(value)
-    return "\""+text.replace(/"/g, '""')+"\""
+    return '"' + text.replace(/"/g, '""') + '"'
   }
   const csv = [
     headers.map(escapeCell).join(","),
     ...rows.map((row) => headers.map((header) => escapeCell(row[header])).join(",")),
   ].join("\n")
-
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
   const url = window.URL.createObjectURL(blob)
   const link = document.createElement("a")
@@ -162,14 +135,21 @@ function flattenEvaluation(e) {
   const scores = e.scores || {}
   return {
     residentId: e.residentId || e.resident || "",
-    resident: e.resident || "",
+    residentLevel: e.residentLevel || "",
     caseKey: e.universalCaseKey || "",
     caseName: e.caseName || e.universalCaseTitle || "",
     sessionCode: e.sessionCode || "",
+    sessionDay: e.sessionDay ?? "",
+    caseIndex: e.caseIndex ?? "",
+    phase: e.phase || "",
     recordType: e.recordType || "",
+    startedAt: formatFirebaseDate(e.startedAt),
     submittedAt: formatFirebaseDate(e.createdAt),
+    timeSeconds: e.timeSeconds ?? "",
+    confidence: e.confidence ?? "",
+    leadingDiagnosis: e.leadingDiagnosis || "",
     evaluator: e.evaluator || "",
-    total: e.total ?? e.totalScore ?? 0,
+    total: e.total ?? 0,
     globalRating: e.globalRating || "",
     problemFraming: scores.problemFraming ?? "",
     syndromeIdentification: scores.syndromeIdentification ?? "",
@@ -178,46 +158,18 @@ function flattenEvaluation(e) {
     anticipation: scores.anticipation ?? "",
     reassessment: scores.reassessment ?? "",
     traineeAnswer: e.traineeAnswer || "",
+    errorTags: Array.isArray(e.errorTags) ? e.errorTags.join("; ") : "",
     evaluatorNotes: e.evaluatorNotes || "",
   }
 }
 
-const pageWrap = {
-  minHeight: "100vh",
-  background: "#f6f7fb",
-  padding: "24px 16px 40px",
-  fontFamily: "Arial, sans-serif",
-  color: "#0f172a",
-}
-
-const container = { maxWidth: 1300, margin: "0 auto" }
+const pageWrap = { minHeight: "100vh", background: "#f6f7fb", padding: "24px 16px 40px", fontFamily: "Arial, sans-serif", color: "#0f172a" }
+const container = { maxWidth: 1320, margin: "0 auto" }
 const card = { background: "#fff", border: "1px solid #dbe4ee", borderRadius: 16, padding: 18 }
-const inputStyle = {
-  width: "100%",
-  padding: 12,
-  borderRadius: 10,
-  border: "1px solid #cbd5e1",
-  boxSizing: "border-box",
-  background: "#fff",
-}
+const inputStyle = { width: "100%", padding: 12, borderRadius: 10, border: "1px solid #cbd5e1", boxSizing: "border-box", background: "#fff" }
 const textareaStyle = { ...inputStyle, minHeight: 140, resize: "vertical" }
-const buttonBase = {
-  padding: "10px 14px",
-  color: "white",
-  border: "none",
-  borderRadius: 10,
-  fontWeight: 700,
-  cursor: "pointer",
-}
-const tabStyle = (active) => ({
-  padding: "10px 14px",
-  borderRadius: 12,
-  border: "none",
-  fontWeight: 700,
-  cursor: "pointer",
-  background: active ? "#0f4c81" : "#dbe4ee",
-  color: active ? "white" : "#0f172a",
-})
+const buttonBase = { padding: "10px 14px", color: "white", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }
+const tabStyle = (active) => ({ padding: "10px 14px", borderRadius: 12, border: "none", fontWeight: 700, cursor: "pointer", background: active ? "#0f4c81" : "#dbe4ee", color: active ? "white" : "#0f172a" })
 
 function MetricCard({ label, value, subtext }) {
   return (
@@ -229,33 +181,16 @@ function MetricCard({ label, value, subtext }) {
   )
 }
 
-function ResidentPortal({
-  residentId,
-  sessionConfig,
-  residentSessionCode,
-  setResidentSessionCode,
-  residentUnlocked,
-  unlockResidentSession,
-  releasedCase,
-  alreadySubmitted,
-  submitResidentAnswer,
-  handleLogout,
-  statusMessage,
-}) {
+function ResidentPortal(props) {
+  const { residentId, sessionConfig, residentSessionCode, setResidentSessionCode, residentUnlocked, unlockResidentSession, releasedCase, alreadySubmitted, submitResidentAnswer, handleLogout, statusMessage } = props
   const [answer, setAnswer] = useState("")
+  const [leadingDiagnosis, setLeadingDiagnosis] = useState("")
+  const [confidence, setConfidence] = useState(50)
 
   return (
     <div style={pageWrap}>
       <div style={container}>
-        <div
-          style={{
-            background: "linear-gradient(135deg, #0c4a6e, #0f766e)",
-            color: "white",
-            borderRadius: 18,
-            padding: 22,
-            marginBottom: 18,
-          }}
-        >
+        <div style={{ background: "linear-gradient(135deg, #0c4a6e, #0f766e)", color: "white", borderRadius: 18, padding: 22, marginBottom: 18 }}>
           <div style={{ fontSize: 28, fontWeight: 800 }}>Resident Portal · {residentId}</div>
         </div>
 
@@ -273,12 +208,13 @@ function ResidentPortal({
           <div style={{ fontWeight: 800, marginBottom: 8 }}>Session code</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10 }}>
             <input value={residentSessionCode} onChange={(e) => setResidentSessionCode(e.target.value)} style={inputStyle} />
-            <button type="button" onClick={unlockResidentSession} style={{ ...buttonBase, background: "#0f766e" }}>
-              Unlock
-            </button>
+            <button type="button" onClick={unlockResidentSession} style={{ ...buttonBase, background: "#0f766e" }}>Unlock</button>
           </div>
           <div style={{ marginTop: 10, color: residentUnlocked ? "#166534" : "#475569" }}>
             {residentUnlocked ? "Session unlocked." : sessionConfig?.isOpen ? "Session is open." : "Session is closed."}
+          </div>
+          <div style={{ marginTop: 10, color: "#64748b", fontSize: 13 }}>
+            Session day: <strong>{sessionConfig?.sessionDay ?? "—"}</strong> · Phase: <strong>{sessionConfig?.phase || "—"}</strong> · Case index: <strong>{sessionConfig?.caseIndex ?? "—"}</strong>
           </div>
         </div>
 
@@ -292,33 +228,23 @@ function ResidentPortal({
               <div style={{ marginTop: 10, color: "#334155" }}>{releasedCase.domainFocus}</div>
               <div style={{ marginTop: 10 }}>{releasedCase.vignette}</div>
               <div style={{ marginTop: 12, fontWeight: 800 }}>Progressive data</div>
-              <ul>
-                {releasedCase.progressiveData.map((item) => <li key={item}>{item}</li>)}
-              </ul>
+              <ul>{releasedCase.progressiveData.map((item) => <li key={item}>{item}</li>)}</ul>
+
+              <div style={{ marginTop: 12, fontWeight: 800 }}>Leading diagnosis</div>
+              <input value={leadingDiagnosis} onChange={(e) => setLeadingDiagnosis(e.target.value)} style={{ ...inputStyle, marginTop: 8 }} disabled={!residentUnlocked || alreadySubmitted} placeholder="Enter your leading diagnosis" />
+
+              <div style={{ marginTop: 12, fontWeight: 800 }}>Confidence (0–100%)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 80px", gap: 10, alignItems: "center", marginTop: 8 }}>
+                <input type="range" min="0" max="100" value={confidence} onChange={(e) => setConfidence(Number(e.target.value))} disabled={!residentUnlocked || alreadySubmitted} />
+                <div style={{ fontWeight: 800 }}>{confidence}%</div>
+              </div>
 
               <div style={{ marginTop: 12, fontWeight: 800 }}>Your reasoning</div>
-              <textarea
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Enter your one-line framing, syndrome/physiology, prioritized differential, interpretation, and next steps."
-                style={{ ...textareaStyle, marginTop: 8, minHeight: 180 }}
-                disabled={!residentUnlocked || alreadySubmitted}
-              />
+              <textarea value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder="Enter your framing, syndrome, prioritized differential, interpretation, and next steps." style={{ ...textareaStyle, marginTop: 8, minHeight: 180 }} disabled={!residentUnlocked || alreadySubmitted} />
 
-              {alreadySubmitted ? (
-                <div style={{ marginTop: 12, color: "#166534", fontWeight: 700 }}>
-                  This resident already submitted this released case.
-                </div>
-              ) : null}
+              {alreadySubmitted ? <div style={{ marginTop: 12, color: "#166534", fontWeight: 700 }}>This resident already submitted this released case.</div> : null}
 
-              <button
-                type="button"
-                onClick={() => submitResidentAnswer(answer)}
-                style={{ ...buttonBase, background: "#0f766e", marginTop: 16 }}
-                disabled={!residentUnlocked || alreadySubmitted}
-              >
-                Submit Once
-              </button>
+              <button type="button" onClick={() => submitResidentAnswer({ answer, leadingDiagnosis, confidence })} style={{ ...buttonBase, background: "#0f766e", marginTop: 16 }} disabled={!residentUnlocked || alreadySubmitted}>Submit Once</button>
             </>
           )}
         </div>
@@ -333,29 +259,27 @@ export default function App() {
   const [residentId, setResidentId] = useState(localStorage.getItem("crft_resident_id") || "R1")
   const [residentSessionCode, setResidentSessionCode] = useState("")
   const [residentUnlocked, setResidentUnlocked] = useState(false)
-
   const [staffEmail, setStaffEmail] = useState("")
   const [staffPassword, setStaffPassword] = useState("")
-
   const [evaluations, setEvaluations] = useState([])
   const [sessionConfig, setSessionConfig] = useState(null)
   const [statusMessage, setStatusMessage] = useState("")
   const [activeStaffTab, setActiveStaffTab] = useState("session")
   const [activeDirectorTab, setActiveDirectorTab] = useState("leadership")
-
   const [sessionEditorCode, setSessionEditorCode] = useState("")
   const [sessionEditorOpen, setSessionEditorOpen] = useState(false)
   const [sessionEditorCaseKey, setSessionEditorCaseKey] = useState("")
-
+  const [sessionEditorDay, setSessionEditorDay] = useState(1)
+  const [sessionEditorPhase, setSessionEditorPhase] = useState("no_feedback")
+  const [sessionEditorCaseIndex, setSessionEditorCaseIndex] = useState(1)
   const [scoringRecordId, setScoringRecordId] = useState("")
   const [scoringEvaluator, setScoringEvaluator] = useState("")
   const [scoringNotes, setScoringNotes] = useState("")
   const [scoringScores, setScoringScores] = useState({ ...initialScores })
+  const [scoringErrorTags, setScoringErrorTags] = useState([])
 
   useEffect(() => {
-    const unsub = watchAuth((u) => {
-      setUser(u)
-    })
+    const unsub = watchAuth((u) => setUser(u))
     return () => unsub()
   }, [])
 
@@ -366,15 +290,16 @@ export default function App() {
       setSessionEditorCode(data?.sessionCode || "")
       setSessionEditorOpen(Boolean(data?.isOpen))
       setSessionEditorCaseKey(data?.releasedCaseKey || data?.activeCase || "")
+      setSessionEditorDay(Number(data?.sessionDay || 1))
+      setSessionEditorPhase(data?.phase || "no_feedback")
+      setSessionEditorCaseIndex(Number(data?.caseIndex || 1))
     })
     return () => unsubSession()
   }, [user])
 
   useEffect(() => {
     if (!user || portal === "resident") return
-    const unsub = subscribeEvaluations((rows) => {
-      setEvaluations(rows || [])
-    })
+    const unsub = subscribeEvaluations((rows) => setEvaluations(rows || []))
     return () => unsub()
   }, [user, portal])
 
@@ -385,21 +310,13 @@ export default function App() {
   }, [statusMessage])
 
   const releasedCaseKey = sessionConfig?.releasedCaseKey || sessionConfig?.activeCase || ""
-  const releasedCase = useMemo(
-    () => universalCases.find((c) => c.key === releasedCaseKey) || null,
-    [releasedCaseKey]
-  )
-
+  const releasedCase = useMemo(() => universalCases.find((c) => c.key === releasedCaseKey) || null, [releasedCaseKey])
   const currentSession = sessionConfig?.sessionCode || ""
   const residentSubmitKey = `crft_submitted_${residentId}_${currentSession}_${releasedCaseKey}`
+  const residentStartKey = `crft_started_${residentId}_${currentSession}_${releasedCaseKey}`
   const alreadySubmitted = Boolean(localStorage.getItem(residentSubmitKey))
 
-  const unratedSubmissions = useMemo(
-    () => evaluations
-      .filter((e) => (e.recordType || "") === "resident_submission" || (e.globalRating || "") === "Unrated")
-      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)),
-    [evaluations]
-  )
+  const unratedSubmissions = useMemo(() => evaluations.filter((e) => (e.recordType || "") === "resident_submission" || (e.globalRating || "") === "Unrated").sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)), [evaluations])
 
   const leadershipMetrics = useMemo(() => {
     const totalAssessments = evaluations.length
@@ -411,25 +328,20 @@ export default function App() {
       return { key: d.key, title: d.title, avg: avg.toFixed(2) }
     })
     const weakest = [...avgByDomain].sort((a, b) => Number(a.avg) - Number(b.avg))[0]
-
     const residentMap = {}
     evaluations.forEach((e) => {
       const id = e.residentId || e.resident || "Unknown"
       if (!residentMap[id]) residentMap[id] = []
       residentMap[id].push(Number(e.total || 0))
     })
-
-    const riskResidents = Object.entries(residentMap)
-      .map(([id, scores]) => {
-        const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
-        const trend = scores.length >= 2 ? scores[scores.length - 1] - scores[0] : 0
-        let flag = "Stable"
-        if (avg < 10) flag = "High risk"
-        else if (avg < 14 || trend < 0) flag = "Watch"
-        return { id, avg: avg.toFixed(1), trend, flag }
-      })
-      .sort((a, b) => Number(a.avg) - Number(b.avg))
-
+    const riskResidents = Object.entries(residentMap).map(([id, scores]) => {
+      const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0
+      const trend = scores.length >= 2 ? scores[scores.length - 1] - scores[0] : 0
+      let flag = "Stable"
+      if (avg < 10) flag = "High risk"
+      else if (avg < 14 || trend < 0) flag = "Watch"
+      return { id, avg: avg.toFixed(1), trend, flag }
+    }).sort((a, b) => Number(a.avg) - Number(b.avg))
     return { totalAssessments, avgScore, weakest, riskResidents, avgByDomain }
   }, [evaluations])
 
@@ -466,55 +378,47 @@ export default function App() {
 
   const unlockResidentSession = () => {
     const expected = sessionConfig?.sessionCode || ""
-    if (!sessionConfig?.isOpen) {
-      alert("Session is closed.")
-      return
-    }
-    if (!residentSessionCode.trim()) {
-      alert("Enter the session code.")
-      return
-    }
-    if (residentSessionCode.trim() !== expected) {
-      alert("Wrong session code.")
-      return
-    }
+    if (!sessionConfig?.isOpen) return alert("Session is closed.")
+    if (!residentSessionCode.trim()) return alert("Enter the session code.")
+    if (residentSessionCode.trim() !== expected) return alert("Wrong session code.")
+    if (!localStorage.getItem(residentStartKey)) localStorage.setItem(residentStartKey, String(Date.now()))
     setResidentUnlocked(true)
   }
 
-  const submitResidentAnswer = async (answer) => {
-    if (!releasedCase) {
-      alert("No released case.")
-      return
-    }
-    if (!residentUnlocked) {
-      alert("Unlock the session first.")
-      return
-    }
-    if (alreadySubmitted) {
-      alert("This resident already submitted this released case.")
-      return
-    }
-    if (!answer.trim()) {
-      alert("Enter reasoning before submitting.")
-      return
-    }
+  const submitResidentAnswer = async ({ answer, leadingDiagnosis, confidence }) => {
+    if (!releasedCase) return alert("No released case.")
+    if (!residentUnlocked) return alert("Unlock the session first.")
+    if (alreadySubmitted) return alert("This resident already submitted this released case.")
+    if (!answer.trim()) return alert("Enter reasoning before submitting.")
+    if (!leadingDiagnosis.trim()) return alert("Enter a leading diagnosis.")
 
+    const startedAtMs = Number(localStorage.getItem(residentStartKey) || Date.now())
+    const nowMs = Date.now()
     const payload = {
       recordType: "resident_submission",
       residentId,
       resident: residentId,
+      residentLevel: residentId,
       caseName: releasedCase.title,
       universalCaseKey: releasedCase.key,
       universalCaseTitle: releasedCase.title,
       universalCaseSetting: releasedCase.setting,
       sessionCode: sessionConfig?.sessionCode || "",
+      sessionDay: Number(sessionConfig?.sessionDay || 1),
+      phase: sessionConfig?.phase || "no_feedback",
+      caseIndex: Number(sessionConfig?.caseIndex || 1),
       evaluator: "",
       globalRating: "Unrated",
       total: 0,
       scores: { ...initialScores },
       traineeAnswer: answer.trim(),
+      leadingDiagnosis: leadingDiagnosis.trim(),
+      confidence: Number(confidence),
+      timeSeconds: Math.max(1, Math.round((nowMs - startedAtMs) / 1000)),
+      startedAt: new Date(startedAtMs),
+      errorTags: [],
+      evaluatorNotes: "",
     }
-
     try {
       await createEvaluation(payload)
       localStorage.setItem(residentSubmitKey, "1")
@@ -533,6 +437,9 @@ export default function App() {
         isOpen: sessionEditorOpen,
         releasedCaseKey: sessionEditorCaseKey || "",
         activeCase: sessionEditorCaseKey || "",
+        sessionDay: Number(sessionEditorDay || 1),
+        phase: sessionEditorPhase || "no_feedback",
+        caseIndex: Number(sessionEditorCaseIndex || 1),
       })
       setStatusMessage("Session settings saved.")
     } catch (e) {
@@ -553,35 +460,30 @@ export default function App() {
       anticipation: Number(record.scores?.anticipation || 0),
       reassessment: Number(record.scores?.reassessment || 0),
     })
+    setScoringErrorTags(Array.isArray(record.errorTags) ? record.errorTags : [])
     setActiveStaffTab("scoring")
     setStatusMessage("Loaded into scoring workspace.")
   }
 
-  const selectedScoringRecord = useMemo(
-    () => evaluations.find((e) => e.id === scoringRecordId) || null,
-    [evaluations, scoringRecordId]
-  )
+  const selectedScoringRecord = useMemo(() => evaluations.find((e) => e.id === scoringRecordId) || null, [evaluations, scoringRecordId])
+  const scoringTotal = useMemo(() => Object.values(scoringScores).reduce((sum, value) => sum + Number(value || 0), 0), [scoringScores])
 
-  const scoringTotal = useMemo(
-    () => Object.values(scoringScores).reduce((sum, value) => sum + Number(value || 0), 0),
-    [scoringScores]
-  )
+  const toggleErrorTag = (tag) => {
+    setScoringErrorTags((prev) => prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag])
+  }
 
   const saveScoring = async () => {
-    if (!selectedScoringRecord) {
-      alert("Load a submission first.")
-      return
-    }
-    const payload = {
-      scores: { ...scoringScores },
-      total: scoringTotal,
-      globalRating: getGlobalRating(scoringTotal),
-      evaluator: scoringEvaluator || user?.email || "",
-      evaluatorNotes: scoringNotes,
-      recordType: "scored_evaluation",
-    }
+    if (!selectedScoringRecord) return alert("Load a submission first.")
     try {
-      await updateEvaluation(selectedScoringRecord.id, payload)
+      await updateEvaluation(selectedScoringRecord.id, {
+        scores: { ...scoringScores },
+        total: scoringTotal,
+        globalRating: getGlobalRating(scoringTotal),
+        evaluator: scoringEvaluator || user?.email || "",
+        evaluatorNotes: scoringNotes,
+        errorTags: scoringErrorTags,
+        recordType: "scored_evaluation",
+      })
       setStatusMessage("Scores saved.")
     } catch (e) {
       console.error(e)
@@ -594,11 +496,6 @@ export default function App() {
     if (!ok) return
     try {
       await removeEvaluation(id)
-      if (id === scoringRecordId) {
-        setScoringRecordId("")
-        setScoringNotes("")
-        setScoringScores({ ...initialScores })
-      }
       setStatusMessage("Evaluation deleted.")
     } catch (e) {
       console.error(e)
@@ -607,30 +504,14 @@ export default function App() {
   }
 
   const exportAll = () => exportRowsAsCsv("crft_all_evaluations.csv", evaluations.map(flattenEvaluation))
-  const exportCurrentSession = () =>
-    exportRowsAsCsv(
-      `crft_session_${currentSession || "unknown"}.csv`,
-      evaluations.filter((e) => (e.sessionCode || "") === currentSession).map(flattenEvaluation)
-    )
-  const exportResident = (rid) =>
-    exportRowsAsCsv(
-      `crft_${rid}.csv`,
-      evaluations.filter((e) => (e.residentId || e.resident) === rid).map(flattenEvaluation)
-    )
+  const exportCurrentSession = () => exportRowsAsCsv(`crft_session_${currentSession || "unknown"}.csv`, evaluations.filter((e) => (e.sessionCode || "") === currentSession).map(flattenEvaluation))
+  const exportResident = (rid) => exportRowsAsCsv(`crft_${rid}.csv`, evaluations.filter((e) => (e.residentId || e.resident) === rid).map(flattenEvaluation))
 
   if (!user || !portal) {
     return (
       <div style={pageWrap}>
         <div style={container}>
-          <div
-            style={{
-              background: "linear-gradient(135deg, #0c4a6e, #0f766e)",
-              color: "white",
-              borderRadius: 18,
-              padding: 22,
-              marginBottom: 18,
-            }}
-          >
+          <div style={{ background: "linear-gradient(135deg, #0c4a6e, #0f766e)", color: "white", borderRadius: 18, padding: 22, marginBottom: 18 }}>
             <h1 style={{ margin: 0 }}>CRFT</h1>
             <div style={{ marginTop: 6 }}>Clinical Reasoning Feedback Tool</div>
             <div style={{ marginTop: 8, opacity: 0.9, fontSize: 13 }}>{appUrl}</div>
@@ -644,9 +525,7 @@ export default function App() {
               <select value={residentId} onChange={(e) => setResidentId(e.target.value)} style={{ ...inputStyle, marginTop: 6 }}>
                 {["R1", "R2", "R3", "R4", "R5"].map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
-              <button type="button" onClick={handleResidentLogin} style={{ ...buttonBase, background: "#0f766e", marginTop: 12, width: "100%" }}>
-                Enter as Resident
-              </button>
+              <button type="button" onClick={handleResidentLogin} style={{ ...buttonBase, background: "#0f766e", marginTop: 12, width: "100%" }}>Enter as Resident</button>
             </div>
 
             <div style={card}>
@@ -655,19 +534,13 @@ export default function App() {
               <input value={staffEmail} onChange={(e) => setStaffEmail(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
               <label style={{ display: "block", marginTop: 10 }}><strong>Password</strong></label>
               <input type="password" value={staffPassword} onChange={(e) => setStaffPassword(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
-              <button type="button" onClick={() => handleStaffLogin("evaluator")} style={{ ...buttonBase, background: "#2563eb", marginTop: 12, width: "100%" }}>
-                Login as Evaluator
-              </button>
+              <button type="button" onClick={() => handleStaffLogin("evaluator")} style={{ ...buttonBase, background: "#2563eb", marginTop: 12, width: "100%" }}>Login as Evaluator</button>
             </div>
 
             <div style={card}>
               <h2 style={{ marginTop: 0 }}>Program Director access</h2>
-              <div style={{ color: "#475569", marginBottom: 12 }}>
-                Uses the same email/password authentication path with a different portal view.
-              </div>
-              <button type="button" onClick={() => handleStaffLogin("director")} style={{ ...buttonBase, background: "#7c3aed", width: "100%" }}>
-                Login as Program Director
-              </button>
+              <div style={{ color: "#475569", marginBottom: 12 }}>Uses the same email/password authentication path with a different portal view.</div>
+              <button type="button" onClick={() => handleStaffLogin("director")} style={{ ...buttonBase, background: "#7c3aed", width: "100%" }}>Login as Program Director</button>
             </div>
           </div>
         </div>
@@ -676,21 +549,7 @@ export default function App() {
   }
 
   if (portal === "resident") {
-    return (
-      <ResidentPortal
-        residentId={residentId}
-        sessionConfig={sessionConfig}
-        residentSessionCode={residentSessionCode}
-        setResidentSessionCode={setResidentSessionCode}
-        residentUnlocked={residentUnlocked}
-        unlockResidentSession={unlockResidentSession}
-        releasedCase={releasedCase}
-        alreadySubmitted={alreadySubmitted}
-        submitResidentAnswer={submitResidentAnswer}
-        handleLogout={handleLogout}
-        statusMessage={statusMessage}
-      />
-    )
+    return <ResidentPortal residentId={residentId} sessionConfig={sessionConfig} residentSessionCode={residentSessionCode} setResidentSessionCode={setResidentSessionCode} residentUnlocked={residentUnlocked} unlockResidentSession={unlockResidentSession} releasedCase={releasedCase} alreadySubmitted={alreadySubmitted} submitResidentAnswer={submitResidentAnswer} handleLogout={handleLogout} statusMessage={statusMessage} />
   }
 
   const isEvaluator = portal === "evaluator"
@@ -699,18 +558,8 @@ export default function App() {
   return (
     <div style={pageWrap}>
       <div style={container}>
-        <div
-          style={{
-            background: "linear-gradient(135deg, #0c4a6e, #0f766e)",
-            color: "white",
-            borderRadius: 18,
-            padding: 22,
-            marginBottom: 18,
-          }}
-        >
-          <div style={{ fontSize: 30, fontWeight: 800 }}>
-            {isEvaluator ? "Evaluator Portal" : "Program Director Portal"}
-          </div>
+        <div style={{ background: "linear-gradient(135deg, #0c4a6e, #0f766e)", color: "white", borderRadius: 18, padding: 22, marginBottom: 18 }}>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>{isEvaluator ? "Evaluator Portal" : "Program Director Portal"}</div>
         </div>
 
         <div style={{ ...card, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -736,63 +585,37 @@ export default function App() {
               <div style={card}>
                 <h2 style={{ marginTop: 0 }}>Session Control</h2>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
-                  <div>
-                    <label><strong>Session code</strong></label>
-                    <input value={sessionEditorCode} onChange={(e) => setSessionEditorCode(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
-                  </div>
-                  <div>
-                    <label><strong>Released case</strong></label>
-                    <select value={sessionEditorCaseKey} onChange={(e) => setSessionEditorCaseKey(e.target.value)} style={{ ...inputStyle, marginTop: 6 }}>
-                      <option value="">Select case</option>
-                      {universalCases.map((c) => <option key={c.key} value={c.key}>{c.title}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label><strong>Session status</strong></label>
-                    <select value={sessionEditorOpen ? "open" : "closed"} onChange={(e) => setSessionEditorOpen(e.target.value === "open")} style={{ ...inputStyle, marginTop: 6 }}>
-                      <option value="open">Open</option>
-                      <option value="closed">Closed</option>
-                    </select>
-                  </div>
+                  <div><label><strong>Session code</strong></label><input value={sessionEditorCode} onChange={(e) => setSessionEditorCode(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} /></div>
+                  <div><label><strong>Released case</strong></label><select value={sessionEditorCaseKey} onChange={(e) => setSessionEditorCaseKey(e.target.value)} style={{ ...inputStyle, marginTop: 6 }}><option value="">Select case</option>{universalCases.map((c) => <option key={c.key} value={c.key}>{c.title}</option>)}</select></div>
+                  <div><label><strong>Session status</strong></label><select value={sessionEditorOpen ? "open" : "closed"} onChange={(e) => setSessionEditorOpen(e.target.value === "open")} style={{ ...inputStyle, marginTop: 6 }}><option value="open">Open</option><option value="closed">Closed</option></select></div>
+                  <div><label><strong>Session day</strong></label><input type="number" min="1" max="10" value={sessionEditorDay} onChange={(e) => setSessionEditorDay(Number(e.target.value))} style={{ ...inputStyle, marginTop: 6 }} /></div>
+                  <div><label><strong>Phase</strong></label><select value={sessionEditorPhase} onChange={(e) => setSessionEditorPhase(e.target.value)} style={{ ...inputStyle, marginTop: 6 }}><option value="no_feedback">no_feedback</option><option value="feedback">feedback</option></select></div>
+                  <div><label><strong>Case index</strong></label><input type="number" min="1" max="10" value={sessionEditorCaseIndex} onChange={(e) => setSessionEditorCaseIndex(Number(e.target.value))} style={{ ...inputStyle, marginTop: 6 }} /></div>
                 </div>
-
-                <div style={{ marginTop: 14, color: "#475569" }}>
-                  Live: code <strong>{sessionConfig?.sessionCode || "—"}</strong> · case <strong>{releasedCase?.title || "—"}</strong> · {sessionConfig?.isOpen ? "Open" : "Closed"}
-                </div>
-
-                <button type="button" onClick={saveSessionControl} style={{ ...buttonBase, background: "#0f766e", marginTop: 16 }}>
-                  Save Session Settings
-                </button>
+                <div style={{ marginTop: 14, color: "#475569" }}>Live: code <strong>{sessionConfig?.sessionCode || "—"}</strong> · case <strong>{releasedCase?.title || "—"}</strong> · {sessionConfig?.isOpen ? "Open" : "Closed"} · day <strong>{sessionConfig?.sessionDay ?? "—"}</strong> · phase <strong>{sessionConfig?.phase || "—"}</strong> · case index <strong>{sessionConfig?.caseIndex ?? "—"}</strong></div>
+                <button type="button" onClick={saveSessionControl} style={{ ...buttonBase, background: "#0f766e", marginTop: 16 }}>Save Session Settings</button>
               </div>
             )}
 
             {activeStaffTab === "scoring" && (
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(320px,1.1fr) minmax(320px,0.9fr)", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(360px,1.1fr) minmax(340px,0.9fr)", gap: 16 }}>
                 <div style={card}>
                   <h2 style={{ marginTop: 0 }}>Scoring Workspace</h2>
-                  {!selectedScoringRecord ? (
-                    <div style={{ color: "#64748b" }}>Load a submission from the assessment log first.</div>
-                  ) : (
+                  {!selectedScoringRecord ? <div style={{ color: "#64748b" }}>Load a submission from the assessment log first.</div> : (
                     <>
-                      <div style={{ marginBottom: 10 }}><strong>Resident:</strong> {selectedScoringRecord.residentId || selectedScoringRecord.resident}</div>
-                      <div style={{ marginBottom: 10 }}><strong>Case:</strong> {selectedScoringRecord.caseName}</div>
-                      <div style={{ marginBottom: 10 }}><strong>Session:</strong> {selectedScoringRecord.sessionCode || "—"}</div>
-                      <div style={{ marginBottom: 10 }}><strong>Submitted:</strong> {formatFirebaseDate(selectedScoringRecord.createdAt)}</div>
-
+                      <div style={{ marginBottom: 8 }}><strong>Resident:</strong> {selectedScoringRecord.residentId || selectedScoringRecord.resident}</div>
+                      <div style={{ marginBottom: 8 }}><strong>Case:</strong> {selectedScoringRecord.caseName}</div>
+                      <div style={{ marginBottom: 8 }}><strong>Session:</strong> {selectedScoringRecord.sessionCode || "—"}</div>
+                      <div style={{ marginBottom: 8 }}><strong>Session day:</strong> {selectedScoringRecord.sessionDay ?? "—"} · <strong>Phase:</strong> {selectedScoringRecord.phase || "—"} · <strong>Case index:</strong> {selectedScoringRecord.caseIndex ?? "—"}</div>
+                      <div style={{ marginBottom: 8 }}><strong>Started:</strong> {formatFirebaseDate(selectedScoringRecord.startedAt)}</div>
+                      <div style={{ marginBottom: 8 }}><strong>Submitted:</strong> {formatFirebaseDate(selectedScoringRecord.createdAt)}</div>
+                      <div style={{ marginBottom: 8 }}><strong>Time:</strong> {selectedScoringRecord.timeSeconds ?? "—"} sec</div>
+                      <div style={{ marginBottom: 8 }}><strong>Leading diagnosis:</strong> {selectedScoringRecord.leadingDiagnosis || "—"}</div>
+                      <div style={{ marginBottom: 8 }}><strong>Confidence:</strong> {selectedScoringRecord.confidence ?? "—"}%</div>
                       <div style={{ marginTop: 12, fontWeight: 800 }}>Resident answer</div>
-                      <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, whiteSpace: "pre-wrap" }}>
-                        {selectedScoringRecord.traineeAnswer || "—"}
-                      </div>
-
-                      <div style={{ marginTop: 14 }}>
-                        <label><strong>Evaluator</strong></label>
-                        <input value={scoringEvaluator} onChange={(e) => setScoringEvaluator(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
-                      </div>
-
-                      <div style={{ marginTop: 14 }}>
-                        <label><strong>Evaluator notes</strong></label>
-                        <textarea value={scoringNotes} onChange={(e) => setScoringNotes(e.target.value)} style={{ ...textareaStyle, marginTop: 6, minHeight: 110 }} />
-                      </div>
+                      <div style={{ marginTop: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, whiteSpace: "pre-wrap" }}>{selectedScoringRecord.traineeAnswer || "—"}</div>
+                      <div style={{ marginTop: 14 }}><label><strong>Evaluator</strong></label><input value={scoringEvaluator} onChange={(e) => setScoringEvaluator(e.target.value)} style={{ ...inputStyle, marginTop: 6 }} /></div>
+                      <div style={{ marginTop: 14 }}><label><strong>Evaluator notes</strong></label><textarea value={scoringNotes} onChange={(e) => setScoringNotes(e.target.value)} style={{ ...textareaStyle, marginTop: 6, minHeight: 110 }} /></div>
                     </>
                   )}
                 </div>
@@ -802,19 +625,22 @@ export default function App() {
                   <div style={{ display: "grid", gap: 12 }}>
                     {domains.map((d) => (
                       <div key={d.key}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                          <strong>{d.title}</strong>
-                          <span>{scoringScores[d.key]}/4</span>
-                        </div>
-                        <select
-                          value={scoringScores[d.key]}
-                          onChange={(e) => setScoringScores((prev) => ({ ...prev, [d.key]: Number(e.target.value) }))}
-                          style={inputStyle}
-                        >
-                          {[0,1,2,3,4].map((n) => <option key={n} value={n}>{n}</option>)}
-                        </select>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><strong>{d.title}</strong><span>{scoringScores[d.key]}/4</span></div>
+                        <select value={scoringScores[d.key]} onChange={(e) => setScoringScores((prev) => ({ ...prev, [d.key]: Number(e.target.value) }))} style={inputStyle}>{[0,1,2,3,4].map((n) => <option key={n} value={n}>{n}</option>)}</select>
                       </div>
                     ))}
+                  </div>
+
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontWeight: 800, marginBottom: 8 }}>Error tags</div>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {errorTagOptions.map((tag) => (
+                        <label key={tag} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input type="checkbox" checked={scoringErrorTags.includes(tag)} onChange={() => toggleErrorTag(tag)} />
+                          <span>{tag}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
                   <div style={{ marginTop: 18, padding: 14, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
@@ -822,9 +648,7 @@ export default function App() {
                     <div style={{ marginTop: 6 }}><strong>Rating:</strong> {getGlobalRating(scoringTotal)}</div>
                   </div>
 
-                  <button type="button" onClick={saveScoring} style={{ ...buttonBase, background: "#0f766e", marginTop: 16, width: "100%" }}>
-                    Save Scores
-                  </button>
+                  <button type="button" onClick={saveScoring} style={{ ...buttonBase, background: "#0f766e", marginTop: 16, width: "100%" }}>Save Scores</button>
                 </div>
               </div>
             )}
@@ -837,21 +661,13 @@ export default function App() {
                     <div key={e.id} style={{ border: "1px solid #dbe4ee", borderRadius: 14, padding: 14 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
                         <div>
-                          <div style={{ fontSize: 18, fontWeight: 800 }}>
-                            {e.residentId || e.resident} · {e.caseName}
-                          </div>
-                          <div style={{ marginTop: 6, color: "#64748b" }}>
-                            {formatFirebaseDate(e.createdAt)} · session {e.sessionCode || "—"} · {e.recordType || "—"}
-                          </div>
-                          <div style={{ marginTop: 10 }}>
-                            <strong>Resident answer:</strong> {e.traineeAnswer || "—"}
-                          </div>
+                          <div style={{ fontSize: 18, fontWeight: 800 }}>{e.residentId || e.resident} · {e.caseName}</div>
+                          <div style={{ marginTop: 6, color: "#64748b" }}>{formatFirebaseDate(e.createdAt)} · session {e.sessionCode || "—"} · day {e.sessionDay ?? "—"} · {e.phase || "—"} · case {e.caseIndex ?? "—"}</div>
+                          <div style={{ marginTop: 8 }}><strong>Leading diagnosis:</strong> {e.leadingDiagnosis || "—"} · <strong>Confidence:</strong> {e.confidence ?? "—"}% · <strong>Time:</strong> {e.timeSeconds ?? "—"} sec</div>
+                          <div style={{ marginTop: 10 }}><strong>Resident answer:</strong> {e.traineeAnswer || "—"}</div>
                         </div>
-                        <div style={{ background: "#991b1b", color: "white", borderRadius: 999, padding: "8px 12px", fontWeight: 800 }}>
-                          {e.total || 0}/24 · {e.globalRating || "Unrated"}
-                        </div>
+                        <div style={{ background: "#991b1b", color: "white", borderRadius: 999, padding: "8px 12px", fontWeight: 800 }}>{e.total || 0}/24 · {e.globalRating || "Unrated"}</div>
                       </div>
-
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
                         <button type="button" onClick={() => loadIntoScoringWorkspace(e)} style={{ ...buttonBase, background: "#2563eb" }}>Load</button>
                         <button type="button" onClick={() => handleDeleteEvaluation(e.id)} style={{ ...buttonBase, background: "#dc2626" }}>Delete</button>
@@ -869,13 +685,7 @@ export default function App() {
                   {["R1", "R2", "R3", "R4", "R5"].map((rid) => {
                     const rows = evaluations.filter((e) => (e.residentId || e.resident) === rid)
                     const avg = rows.length ? (rows.reduce((sum, row) => sum + Number(row.total || 0), 0) / rows.length).toFixed(1) : "0.0"
-                    return (
-                      <div key={rid} style={{ border: "1px solid #dbe4ee", borderRadius: 14, padding: 14 }}>
-                        <div style={{ fontWeight: 800 }}>{rid}</div>
-                        <div style={{ marginTop: 6 }}>Assessments: {rows.length}</div>
-                        <div>Average total: {avg}/24</div>
-                      </div>
-                    )
+                    return <div key={rid} style={{ border: "1px solid #dbe4ee", borderRadius: 14, padding: 14 }}><div style={{ fontWeight: 800 }}>{rid}</div><div style={{ marginTop: 6 }}>Assessments: {rows.length}</div><div>Average total: {avg}/24</div></div>
                   })}
                 </div>
               </div>
@@ -943,16 +753,9 @@ export default function App() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                   <button type="button" onClick={exportAll} style={{ ...buttonBase, background: "#0f766e" }}>Export All CSV</button>
                   <button type="button" onClick={exportCurrentSession} style={{ ...buttonBase, background: "#2563eb" }}>Export Current Session CSV</button>
-                  {["R1", "R2", "R3", "R4", "R5"].map((rid) => (
-                    <button key={rid} type="button" onClick={() => exportResident(rid)} style={{ ...buttonBase, background: "#7c3aed" }}>
-                      Export {rid}
-                    </button>
-                  ))}
+                  {["R1", "R2", "R3", "R4", "R5"].map((rid) => <button key={rid} type="button" onClick={() => exportResident(rid)} style={{ ...buttonBase, background: "#7c3aed" }}>Export {rid}</button>)}
                 </div>
-
-                <div style={{ marginTop: 16, color: "#64748b" }}>
-                  Export includes resident ID, case, session, timestamps, domain scores, total score, rating, resident answer, and evaluator notes.
-                </div>
+                <div style={{ marginTop: 16, color: "#64748b" }}>Export includes session day, phase, case index, timing, confidence, leading diagnosis, CRFT scores, error tags, and evaluator notes.</div>
               </div>
             )}
           </>
