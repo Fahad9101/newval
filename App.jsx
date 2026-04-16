@@ -683,6 +683,30 @@ function getConsultantReport({ resident, evaluator, rotation, caseName, scores, 
   return [intro, para1, para2, para3].filter(Boolean).join("\n\n")
 }
 
+function exportAnalyticsCSVFile(rows) {
+  if (!rows.length) return
+
+  const headers = ["Resident", "Avg Score", "Delta", "Assessments", "Flag", "Latest Rating", "Low Domains"]
+  const csvRows = rows.map((row) => [
+    `"${row.resident || ""}"`,
+    `"${row.avgScore ?? ""}"`,
+    `"${row.delta ?? ""}"`,
+    `"${row.count ?? ""}"`,
+    `"${row.flag || ""}"`,
+    `"${row.latestRating || ""}"`,
+    `"${(row.lowDomains || []).join("; ")}"`,
+  ])
+
+  const csvContent = [headers, ...csvRows].map((r) => r.join(",")).join("\n")
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = "crft_program_intelligence.csv"
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function exportToCSV(data) {
   if (!data.length) return
 
@@ -1535,6 +1559,7 @@ export default function App() {
   const [selectedCaseKey, setSelectedCaseKey] = useState("")
   const [caseSettingFilter, setCaseSettingFilter] = useState("All")
   const [dashboardView, setDashboardView] = useState("program")
+  const [userRole, setUserRole] = useState("resident")
 
   const [facultyMode, setFacultyMode] = useState(false)
   const [traineeAnswer, setTraineeAnswer] = useState("")
@@ -1555,6 +1580,9 @@ export default function App() {
     [selectedCaseKey]
   )
 
+  const isResident = userRole === "resident"
+  const isProgramDirector = userRole === "programDirector"
+
   const filteredCases = useMemo(() => {
     if (caseSettingFilter === "All") return universalCases
     return universalCases.filter((c) => c.setting === caseSettingFilter)
@@ -1573,22 +1601,39 @@ export default function App() {
   useEffect(() => {
     const unsub = watchAuth((u) => {
       setUser(u)
-      setIsEvaluator(Boolean(u?.email))
+      const storedRole = typeof window !== "undefined" ? window.localStorage.getItem("crftRole") : null
+      const resolvedRole = u?.isAnonymous ? "resident" : storedRole || "evaluator"
+      setUserRole(resolvedRole)
+      setIsEvaluator(resolvedRole === "evaluator")
     })
     return () => unsub()
   }, [])
 
   useEffect(() => {
-    if (!isEvaluator) return
+    if (!(isEvaluator || userRole === "programDirector")) return
     const unsub = subscribeEvaluations(setEvaluations)
     return () => unsub()
-  }, [isEvaluator])
+  }, [isEvaluator, userRole])
 
   useEffect(() => {
     if (!statusMessage) return
     const t = setTimeout(() => setStatusMessage(""), 2500)
     return () => clearTimeout(t)
   }, [statusMessage])
+
+  useEffect(() => {
+    if (userRole === "programDirector") {
+      setDashboardView((prev) => (["leadership", "intelligence", "residents", "reports"].includes(prev) ? prev : "leadership"))
+      return
+    }
+
+    if (userRole === "evaluator") {
+      setDashboardView((prev) => (["program", "residents", "log"].includes(prev) ? prev : "program"))
+      return
+    }
+
+    setDashboardView("program")
+  }, [userRole])
 
   useEffect(() => {
     const SpeechRecognition =
@@ -1807,6 +1852,11 @@ export default function App() {
       residentSummaries,
     }
   }, [evaluations, cohortAnalytics])
+
+  const exportAnalyticsCSV = () => {
+    exportAnalyticsCSVFile(programIntelligence.residentSummaries || [])
+    setStatusMessage("Program intelligence CSV exported.")
+  }
 
   const stopVoiceTyping = () => {
     try {
@@ -2159,6 +2209,7 @@ export default function App() {
               <button
                 onClick={async () => {
                   try {
+                    if (typeof window !== "undefined") window.localStorage.setItem("crftRole", "resident")
                     await signInResident()
                   } catch (e) {
                     console.error(e)
@@ -2190,6 +2241,7 @@ export default function App() {
               <button
                 onClick={async () => {
                   try {
+                    if (typeof window !== "undefined") window.localStorage.setItem("crftRole", "evaluator")
                     await signInEvaluator(evaluatorLoginEmail, evaluatorLoginPassword)
                   } catch (e) {
                     console.error(e)
@@ -2199,6 +2251,38 @@ export default function App() {
                 style={{ ...buttonBase, background: "#1d4ed8", marginTop: 12, width: "100%" }}
               >
                 Login as Evaluator
+              </button>
+            </div>
+
+            <div style={sectionCard}>
+              <h2 style={{ marginTop: 0 }}>Program Director Access</h2>
+              <p style={{ color: "#475569" }}>Leadership-only oversight and program intelligence view.</p>
+              <input
+                placeholder="Program Director email"
+                value={evaluatorLoginEmail}
+                onChange={(e) => setEvaluatorLoginEmail(e.target.value)}
+                style={inputStyle}
+              />
+              <input
+                placeholder="Password"
+                type="password"
+                value={evaluatorLoginPassword}
+                onChange={(e) => setEvaluatorLoginPassword(e.target.value)}
+                style={inputStyle}
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    if (typeof window !== "undefined") window.localStorage.setItem("crftRole", "programDirector")
+                    await signInEvaluator(evaluatorLoginEmail, evaluatorLoginPassword)
+                  } catch (e) {
+                    console.error(e)
+                    alert("Program Director login failed.")
+                  }
+                }}
+                style={{ ...buttonBase, background: "#7c3aed", marginTop: 12, width: "100%" }}
+              >
+                Login as Program Director
               </button>
             </div>
 
@@ -2230,6 +2314,251 @@ export default function App() {
     )
   }
 
+  if (isProgramDirector) {
+    return (
+      <div style={pageWrap}>
+        <div style={container}>
+          <div style={hero}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 12, letterSpacing: 1.2, opacity: 0.9, textTransform: "uppercase", fontWeight: 800 }}>Program Director Workspace</div>
+                <h1 style={{ margin: "6px 0 0", fontSize: "clamp(28px, 5vw, 44px)" }}>CRFT Leadership Suite</h1>
+                <div style={{ marginTop: 6, opacity: 0.95, fontSize: 15 }}>Leadership Dashboard and Program Intelligence separated for director-only oversight.</div>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button onClick={() => window.print()} style={{ ...buttonBase, background: "#2563eb" }}>Print / Save PDF</button>
+                <button onClick={exportAnalyticsCSV} style={{ ...buttonBase, background: "#0f766e" }}>Export Program CSV</button>
+                <button onClick={() => { if (typeof window !== "undefined") window.localStorage.removeItem("crftRole"); logOut() }} style={{ ...buttonBase, background: "#475569" }}>Logout</button>
+              </div>
+            </div>
+          </div>
+
+          {statusMessage && (
+            <div className="hide-print" style={{ marginBottom: 16, padding: 12, borderRadius: 10, background: "#f5f3ff", border: "1px solid #ddd6fe", color: "#0f172a" }}>
+              {statusMessage}
+            </div>
+          )}
+
+          <div className="hide-print" style={{ ...mutedCard, marginBottom: 18, padding: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 12, letterSpacing: 1.1, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>Director-only analytics</div>
+                <h2 style={{ margin: "6px 0 0", fontSize: 28 }}>Leadership Dashboard</h2>
+                <div style={{ color: "#475569", marginTop: 6 }}>Executive summary on one page, deeper program intelligence on the next.</div>
+              </div>
+
+              <SegmentedTabs
+                value={dashboardView}
+                onChange={setDashboardView}
+                options={[
+                  { value: "leadership", label: "Leadership Dashboard" },
+                  { value: "intelligence", label: "Program Intelligence" },
+                  { value: "residents", label: "Resident Profiles" },
+                  { value: "reports", label: "Reports / Exports" },
+                ]}
+              />
+            </div>
+
+            {dashboardView === "leadership" && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
+                  <MetricCard label="Unique residents" value={programIntelligence.uniqueResidents} subvalue={`${cohortAnalytics.totalEvaluations} total assessments`} tone="primary" />
+                  <MetricCard label="Average CRFT score" value={`${programIntelligence.avgTotal}/24`} subvalue={`${programIntelligence.improvingResidents} residents improved ≥2 points`} tone="success" />
+                  <MetricCard label="Near consultant rate" value={`${programIntelligence.nearConsultantRate}%`} subvalue="Leadership-friendly outcome metric" tone="warning" />
+                  <MetricCard label="Residents needing attention" value={programIntelligence.highRiskResidents.length} subvalue={`${programIntelligence.stagnantResidents} stagnant or declining`} tone={programIntelligence.highRiskResidents.length ? "danger" : "success"} />
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 16, alignItems: "stretch", marginBottom: 16 }}>
+                  <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>Program score trend</h3>
+                        <div style={{ color: "#64748b", marginTop: 4 }}>Average CRFT score by month</div>
+                      </div>
+                      <div style={{ ...chipStyle("#7c3aed") }}>Executive view</div>
+                    </div>
+                    <MiniLineChart data={programIntelligence.monthlyTrend} max={24} color="#7c3aed" suffix="/24" />
+                  </div>
+
+                  <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                    <h3 style={{ marginTop: 0 }}>Leadership summary</h3>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>Weakest domain</div>
+                        <div style={{ marginTop: 6, fontSize: 20, fontWeight: 800 }}>{cohortAnalytics.weakestDomain || "—"}</div>
+                      </div>
+                      <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>Case mix</div>
+                        <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                          {(programIntelligence.settingCounts.length ? programIntelligence.settingCounts : [{ label: "No tagged cases yet", value: 0 }]).map((item) => (
+                            <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                              <span>{item.label}</span>
+                              <strong>{item.value}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{ padding: 12, borderRadius: 12, background: "#f5f3ff", border: "1px solid #ddd6fe" }}>
+                        <div style={{ fontWeight: 800, color: "#6d28d9" }}>Director note</div>
+                        <div style={{ marginTop: 6, color: "#374151" }}>
+                          Focus first on the weakest program domain and on residents flagged high risk or watch. This is the screen for rapid leadership action.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 16 }}>
+                  <ResidentsAttentionTable residents={programIntelligence.highRiskResidents.slice(0, 8)} />
+                  <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                    <h3 style={{ marginTop: 0 }}>Top performers</h3>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {(programIntelligence.leaderboard.length ? programIntelligence.leaderboard : [{ resident: "No leaderboard yet", avgScore: 0, delta: 0, count: 0 }]).map((resident, idx) => (
+                        <div key={`${resident.resident}-${idx}`} style={{ padding: 12, borderRadius: 12, background: idx === 0 ? "#ecfdf5" : "#f8fafc", border: "1px solid #e2e8f0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+                            <strong>{resident.resident}</strong>
+                            <div style={{ ...chipStyle(idx === 0 ? "#047857" : "#334155") }}>{resident.avgScore}/24</div>
+                          </div>
+                          <div style={{ marginTop: 8, color: "#475569", fontSize: 14 }}>{resident.count} assessments · delta {resident.delta > 0 ? "+" : ""}{resident.delta}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {dashboardView === "intelligence" && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                  <HorizontalBarChart
+                    title="Average score by domain"
+                    data={domains.map((domain) => ({ label: domain.title, value: cohortAnalytics.avgByDomain[domain.key] || 0 }))}
+                    maxValue={4}
+                    color="#7c3aed"
+                    suffix="/4"
+                  />
+                  <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                    <h3 style={{ marginTop: 0 }}>Domain heatmap</h3>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {domains.map((domain) => {
+                        const value = cohortAnalytics.avgByDomain[domain.key] || 0
+                        const tone = value < 2.5 ? { bg: "#fef2f2", border: "#fecaca", text: "#991b1b" } : value < 3 ? { bg: "#fffbeb", border: "#fde68a", text: "#92400e" } : { bg: "#ecfdf5", border: "#bbf7d0", text: "#065f46" }
+                        return (
+                          <div key={domain.key} style={{ padding: 12, borderRadius: 12, background: tone.bg, border: `1px solid ${tone.border}`, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                            <div>
+                              <strong style={{ color: tone.text }}>{domain.title}</strong>
+                              <div style={{ marginTop: 4, color: "#475569", fontSize: 13 }}>{domain.clue}</div>
+                            </div>
+                            <div style={{ ...chipStyle(tone.text === "#991b1b" ? "#dc2626" : tone.text === "#92400e" ? "#d97706" : "#059669") }}>{value.toFixed(2)}/4</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16, marginBottom: 16 }}>
+                  <h3 style={{ marginTop: 0 }}>Resident risk table</h3>
+                  <ResidentsAttentionTable residents={programIntelligence.residentSummaries} compact={false} />
+                </div>
+
+                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                  <h3 style={{ marginTop: 0 }}>Program interpretation</h3>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                      Current program average is <strong>{programIntelligence.avgTotal}/24</strong>. The weakest domain is <strong>{cohortAnalytics.weakestDomain || "not yet available"}</strong>.
+                    </div>
+                    <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                      There are <strong>{programIntelligence.highRiskResidents.length}</strong> residents currently flagged for attention and <strong>{programIntelligence.improvingResidents}</strong> with clear score improvement of at least 2 points.
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {dashboardView === "residents" && (
+              <>
+                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16, marginBottom: 16 }}>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <div style={{ minWidth: 260, flex: 1 }}>
+                      <label><strong>Select resident</strong></label>
+                      <select value={selectedResident} onChange={(e) => setSelectedResident(e.target.value)} style={{ ...inputStyle, marginTop: 6 }}>
+                        <option value="">Choose resident</option>
+                        {programIntelligence.residentSummaries.map((resident) => (
+                          <option key={resident.resident} value={resident.resident}>{resident.resident}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: 220 }}>
+                      <MetricCard label="Resident average" value={`${residentAverage}/24`} subvalue={`${residentData.length} assessments`} tone="primary" />
+                    </div>
+                  </div>
+                </div>
+
+                {selectedResident ? (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 16 }}>
+                      <MetricCard label="First score" value={`${firstResidentEval?.total || firstResidentEval?.totalScore || 0}/24`} subvalue={formatFirebaseDate(firstResidentEval?.createdAt)} />
+                      <MetricCard label="Latest score" value={`${latestResidentEval?.total || latestResidentEval?.totalScore || 0}/24`} subvalue={formatFirebaseDate(latestResidentEval?.createdAt)} tone="primary" />
+                      <MetricCard label="Net change" value={latestResidentEval ? `${(Number(latestResidentEval?.total || latestResidentEval?.totalScore || 0) - Number(firstResidentEval?.total || firstResidentEval?.totalScore || 0)) > 0 ? "+" : ""}${Number(latestResidentEval?.total || latestResidentEval?.totalScore || 0) - Number(firstResidentEval?.total || firstResidentEval?.totalScore || 0)}` : "0"} subvalue="Director trend line" tone={(Number(latestResidentEval?.total || latestResidentEval?.totalScore || 0) - Number(firstResidentEval?.total || firstResidentEval?.totalScore || 0)) >= 0 ? "success" : "danger"} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                      <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                        <h3 style={{ marginTop: 0 }}>Resident radar over time</h3>
+                        <RadarOverTime evaluations={residentData} />
+                      </div>
+                      <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                        <h3 style={{ marginTop: 0 }}>Trend comments</h3>
+                        <div style={{ display: "grid", gap: 10 }}>
+                          {(trendComments.length ? trendComments : ["No longitudinal trend yet."]).map((comment, index) => (
+                            <div key={index} style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>{comment}</div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>Select a resident to view the director profile.</div>
+                )}
+              </>
+            )}
+
+            {dashboardView === "reports" && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginBottom: 16 }}>
+                  <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                    <h3 style={{ marginTop: 0 }}>Exports</h3>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      <button onClick={exportAnalyticsCSV} style={{ ...buttonBase, background: "#7c3aed" }}>Export program intelligence CSV</button>
+                      <button onClick={() => exportToCSV(filteredEvaluations)} style={{ ...buttonBase, background: "#0f766e" }}>Export filtered assessments CSV</button>
+                    </div>
+                  </div>
+                  <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                    <h3 style={{ marginTop: 0 }}>Reporting notes</h3>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>Use Leadership Dashboard for executive meetings.</div>
+                      <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>Use Program Intelligence for targeted remediation and curriculum redesign.</div>
+                      <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>Use Resident Profiles for CCC-style individual review.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                    <h3 style={{ margin: 0 }}>Assessment log</h3>
+                    <div style={{ color: "#64748b" }}>{filteredEvaluations.length} records</div>
+                  </div>
+                  <EvaluationsTable evaluations={filteredEvaluations} onLoad={null} onDelete={null} allowActions={false} />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={pageWrap}>
       <div style={container}>
@@ -2248,7 +2577,7 @@ export default function App() {
           <button onClick={submit} style={{ ...buttonBase, background: "#0f766e" }}>
             {editingId ? "Update Evaluation" : "Save Current Assessment"}
           </button>
-          <button onClick={logOut} style={{ ...buttonBase, background: "#475569" }}>
+          <button onClick={() => { if (typeof window !== "undefined") window.localStorage.removeItem("crftRole"); logOut() }} style={{ ...buttonBase, background: "#475569" }}>
             Logout
           </button>
         </div>
