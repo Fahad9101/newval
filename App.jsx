@@ -1234,6 +1234,292 @@ const chipStyle = (bg) => ({
   fontWeight: 700,
 })
 
+
+
+function formatMonthLabel(key) {
+  if (!key) return ""
+  const [year, month] = key.split("-")
+  const date = new Date(Number(year), Number(month) - 1, 1)
+  return date.toLocaleDateString(undefined, { month: "short", year: "2-digit" })
+}
+
+function getMonthKeyFromEvaluation(evaluation) {
+  const ts = evaluation?.createdAt?.seconds
+  const date = ts ? new Date(ts * 1000) : new Date()
+  const y = date.getFullYear()
+  const m = `${date.getMonth() + 1}`.padStart(2, "0")
+  return `${y}-${m}`
+}
+
+function getResidentSummaries(evaluations) {
+  const grouped = {}
+
+  evaluations.forEach((evaluation) => {
+    const name = (evaluation.resident || "Unknown").trim() || "Unknown"
+    if (!grouped[name]) grouped[name] = []
+    grouped[name].push(evaluation)
+  })
+
+  return Object.entries(grouped).map(([resident, items]) => {
+    const sorted = [...items].sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))
+    const totals = sorted.map((item) => Number(item.total || item.totalScore || 0))
+    const avgScore = totals.length
+      ? Number((totals.reduce((sum, value) => sum + value, 0) / totals.length).toFixed(1))
+      : 0
+    const firstScore = totals[0] || 0
+    const latestScore = totals[totals.length - 1] || 0
+    const delta = Number((latestScore - firstScore).toFixed(1))
+    const latest = sorted[sorted.length - 1]
+
+    const lowDomains = domains
+      .map((domain) => {
+        const values = sorted.map((item) => Number(item.scores?.[domain.key] || 0)).filter((value) => value > 0)
+        const avg = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
+        return {
+          key: domain.key,
+          title: domain.title,
+          avg,
+        }
+      })
+      .sort((a, b) => a.avg - b.avg)
+      .slice(0, 2)
+      .map((item) => item.title)
+
+    let flag = "On track"
+    if (avgScore < 12 || delta <= -2) flag = "High risk"
+    else if (avgScore < 14 || delta < 0 || lowDomains.length) flag = "Watch"
+
+    return {
+      resident,
+      evaluations: sorted,
+      count: sorted.length,
+      avgScore,
+      firstScore,
+      latestScore,
+      delta,
+      latestRating: latest?.globalRating || getGlobalRating(latestScore),
+      lowDomains,
+      lastDate: latest?.createdAt || null,
+      flag,
+    }
+  })
+}
+
+function MetricCard({ label, value, subvalue, tone = "default" }) {
+  const tones = {
+    default: { bg: "#ffffff", border: "#e2e8f0", value: "#0f172a", pill: "#e2e8f0", pillText: "#334155" },
+    primary: { bg: "#eff6ff", border: "#bfdbfe", value: "#1d4ed8", pill: "#dbeafe", pillText: "#1d4ed8" },
+    success: { bg: "#ecfdf5", border: "#bbf7d0", value: "#047857", pill: "#d1fae5", pillText: "#047857" },
+    warning: { bg: "#fffbeb", border: "#fde68a", value: "#b45309", pill: "#fef3c7", pillText: "#92400e" },
+    danger: { bg: "#fef2f2", border: "#fecaca", value: "#dc2626", pill: "#fee2e2", pillText: "#b91c1c" },
+  }
+  const palette = tones[tone] || tones.default
+
+  return (
+    <div
+      style={{
+        background: palette.bg,
+        border: `1px solid ${palette.border}`,
+        borderRadius: 16,
+        padding: 16,
+        minHeight: 110,
+        boxShadow: "0 4px 14px rgba(15, 23, 42, 0.04)",
+      }}
+    >
+      <div style={{ fontSize: 13, color: "#475569", marginBottom: 10, fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 30, lineHeight: 1, fontWeight: 800, color: palette.value }}>{value}</div>
+      {subvalue ? (
+        <div
+          style={{
+            display: "inline-flex",
+            marginTop: 12,
+            padding: "5px 10px",
+            borderRadius: 999,
+            background: palette.pill,
+            color: palette.pillText,
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          {subvalue}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function SegmentedTabs({ value, onChange, options }) {
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        flexWrap: "wrap",
+        gap: 8,
+        padding: 6,
+        background: "#e2e8f0",
+        borderRadius: 14,
+      }}
+    >
+      {options.map((option) => {
+        const active = option.value === value
+        return (
+          <button
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "none",
+              cursor: "pointer",
+              fontWeight: 700,
+              background: active ? "#0f172a" : "transparent",
+              color: active ? "white" : "#334155",
+              boxShadow: active ? "0 4px 12px rgba(15, 23, 42, 0.15)" : "none",
+            }}
+          >
+            {option.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function MiniLineChart({ data, max = 24, color = "#1d4ed8", height = 160, suffix = "" }) {
+  if (!data.length) {
+    return <div style={{ color: "#64748b" }}>No data yet.</div>
+  }
+
+  const width = 520
+  const chartHeight = height
+  const paddingX = 24
+  const paddingY = 18
+  const innerWidth = width - paddingX * 2
+  const innerHeight = chartHeight - paddingY * 2
+  const divisor = Math.max(data.length - 1, 1)
+
+  const points = data.map((item, index) => {
+    const x = paddingX + (index / divisor) * innerWidth
+    const y = paddingY + innerHeight - (Math.max(Number(item.value) || 0, 0) / max) * innerHeight
+    return { ...item, x, y }
+  })
+
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(" ")
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${chartHeight}`} style={{ width: "100%", height: chartHeight }}>
+        {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+          const y = paddingY + innerHeight - tick * innerHeight
+          return <line key={tick} x1={paddingX} y1={y} x2={width - paddingX} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+        })}
+        <polyline points={polyline} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((point) => (
+          <g key={`${point.label}-${point.value}`}>
+            <circle cx={point.x} cy={point.y} r="4.5" fill={color} />
+          </g>
+        ))}
+      </svg>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))`, gap: 8, marginTop: 6 }}>
+        {data.map((item) => (
+          <div key={`${item.label}-${item.value}`} style={{ fontSize: 12, color: "#475569", textAlign: "center" }}>
+            <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.value}{suffix}</div>
+            <div>{item.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DomainHeatmap({ avgByDomain = {} }) {
+  const getTone = (value) => {
+    if (value < 2.5) return { bg: "#fee2e2", border: "#fecaca", text: "#b91c1c", badge: "Priority" }
+    if (value < 3.1) return { bg: "#fef3c7", border: "#fde68a", text: "#92400e", badge: "Watch" }
+    return { bg: "#dcfce7", border: "#bbf7d0", text: "#166534", badge: "Strong" }
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+      {domains.map((domain) => {
+        const value = Number(avgByDomain[domain.key] || 0)
+        const tone = getTone(value)
+        return (
+          <div
+            key={domain.key}
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              background: tone.bg,
+              border: `1px solid ${tone.border}`,
+            }}
+          >
+            <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: 8 }}>{domain.title}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: tone.text }}>{value.toFixed(2)}/4</div>
+            <div style={{ marginTop: 8, fontSize: 12, fontWeight: 700, color: tone.text }}>{tone.badge}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function RiskTable({ residents = [], onSelectResident }) {
+  if (!residents.length) {
+    return <div style={{ color: "#64748b" }}>No resident risk data yet.</div>
+  }
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr>
+            {["Resident", "Avg", "Trend", "Weakest pattern", "Flag", "Action"].map((header) => (
+              <th
+                key={header}
+                style={{
+                  textAlign: "left",
+                  padding: "12px 10px",
+                  borderBottom: "1px solid #e2e8f0",
+                  fontSize: 12,
+                  textTransform: "uppercase",
+                  color: "#64748b",
+                  letterSpacing: 0.4,
+                }}
+              >
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {residents.map((resident) => {
+            const tone = resident.flag === "High risk" ? "#dc2626" : resident.flag === "Watch" ? "#b45309" : "#047857"
+            return (
+              <tr key={resident.resident}>
+                <td style={{ padding: "12px 10px", borderBottom: "1px solid #f1f5f9", fontWeight: 700 }}>{resident.resident}</td>
+                <td style={{ padding: "12px 10px", borderBottom: "1px solid #f1f5f9" }}>{resident.avgScore}/24</td>
+                <td style={{ padding: "12px 10px", borderBottom: "1px solid #f1f5f9", color: resident.delta > 0 ? "#047857" : resident.delta < 0 ? "#dc2626" : "#475569", fontWeight: 700 }}>
+                  {resident.delta > 0 ? `+${resident.delta}` : resident.delta}
+                </td>
+                <td style={{ padding: "12px 10px", borderBottom: "1px solid #f1f5f9" }}>{resident.lowDomains.join(", ") || "—"}</td>
+                <td style={{ padding: "12px 10px", borderBottom: "1px solid #f1f5f9" }}>
+                  <span style={{ display: "inline-flex", padding: "4px 8px", borderRadius: 999, background: `${tone}16`, color: tone, fontSize: 12, fontWeight: 800 }}>{resident.flag}</span>
+                </td>
+                <td style={{ padding: "12px 10px", borderBottom: "1px solid #f1f5f9" }}>
+                  <button onClick={() => onSelectResident(resident.resident)} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "white", cursor: "pointer", fontWeight: 700 }}>
+                    Open profile
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [isEvaluator, setIsEvaluator] = useState(false)
@@ -1248,6 +1534,7 @@ export default function App() {
   const [selectedResident, setSelectedResident] = useState("")
   const [selectedCaseKey, setSelectedCaseKey] = useState("")
   const [caseSettingFilter, setCaseSettingFilter] = useState("All")
+  const [dashboardView, setDashboardView] = useState("program")
 
   const [facultyMode, setFacultyMode] = useState(false)
   const [traineeAnswer, setTraineeAnswer] = useState("")
@@ -1459,6 +1746,67 @@ export default function App() {
       ratingCounts,
     }
   }, [evaluations])
+
+  const programIntelligence = useMemo(() => {
+    const residentSummaries = getResidentSummaries(evaluations)
+    const uniqueResidents = residentSummaries.length
+    const avgTotal = cohortAnalytics.avgTotal || 0
+
+    const nearConsultantCount = evaluations.filter((evaluation) => (evaluation.globalRating || getGlobalRating(Number(evaluation.total || evaluation.totalScore || 0))) === "Near Consultant").length
+    const nearConsultantRate = evaluations.length ? Math.round((nearConsultantCount / evaluations.length) * 100) : 0
+
+    const highRiskResidents = residentSummaries
+      .filter((resident) => resident.flag === "High risk" || resident.flag === "Watch")
+      .sort((a, b) => {
+        const rank = { "High risk": 0, Watch: 1, "On track": 2 }
+        if (rank[a.flag] !== rank[b.flag]) return rank[a.flag] - rank[b.flag]
+        return a.avgScore - b.avgScore
+      })
+
+    const improvingResidents = residentSummaries.filter((resident) => resident.delta >= 2).length
+    const stagnantResidents = residentSummaries.filter((resident) => resident.delta <= 0 && resident.count >= 2).length
+
+    const monthlyMap = {}
+    evaluations.forEach((evaluation) => {
+      const key = getMonthKeyFromEvaluation(evaluation)
+      if (!monthlyMap[key]) monthlyMap[key] = { total: 0, count: 0 }
+      monthlyMap[key].total += Number(evaluation.total || evaluation.totalScore || 0)
+      monthlyMap[key].count += 1
+    })
+
+    const monthlyTrend = Object.entries(monthlyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([key, value]) => ({
+        label: formatMonthLabel(key),
+        value: Number((value.total / value.count).toFixed(1)),
+      }))
+
+    const settingCounts = ["Inpatient", "Outpatient"]
+      .map((setting) => ({
+        label: setting,
+        value: evaluations.filter((evaluation) => (evaluation.universalCaseSetting || "").toLowerCase() === setting.toLowerCase()).length,
+      }))
+      .filter((item) => item.value > 0)
+
+    const leaderboard = residentSummaries
+      .filter((resident) => resident.count >= 2)
+      .sort((a, b) => b.avgScore - a.avgScore)
+      .slice(0, 5)
+
+    return {
+      uniqueResidents,
+      avgTotal,
+      nearConsultantRate,
+      highRiskResidents,
+      improvingResidents,
+      stagnantResidents,
+      monthlyTrend,
+      settingCounts,
+      leaderboard,
+      residentSummaries,
+    }
+  }, [evaluations, cohortAnalytics])
 
   const stopVoiceTyping = () => {
     try {
@@ -2776,310 +3124,342 @@ export default function App() {
 
         {isEvaluator && (
           <>
-            <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
-              <h2 style={{ marginTop: 0, fontSize: 20 }}>Cohort Analytics</h2>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 12,
-                  marginBottom: 14,
-                }}
-              >
-                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12 }}>
-                  <strong>Total evaluations:</strong> {cohortAnalytics.totalEvaluations}
-                </div>
-                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12 }}>
-                  <strong>Average total score:</strong> {cohortAnalytics.avgTotal}/24
-                </div>
-                <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: 12 }}>
-                  <strong>Weakest domain overall:</strong> {cohortAnalytics.weakestDomain || "—"}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                  gap: 16,
-                }}
-              >
-                <HorizontalBarChart
-                  title="Average by Domain"
-                  data={domains.map((d) => ({
-                    label: d.title,
-                    value: cohortAnalytics.avgByDomain[d.key] ?? 0,
-                  }))}
-                  maxValue={4}
-                  color="#0c4a6e"
-                  suffix="/4"
-                />
-                <HorizontalBarChart
-                  title="Global Rating Distribution"
-                  data={Object.entries(cohortAnalytics.ratingCounts || {}).map(([label, value]) => ({
-                    label,
-                    value,
-                  }))}
-                  maxValue={Math.max(...Object.values(cohortAnalytics.ratingCounts || { a: 1 }), 1)}
-                  color="#0f766e"
-                />
-              </div>
-            </div>
-
-            <div className="hide-print" style={{ ...mutedCard, marginBottom: 18 }}>
+            <div className="hide-print" style={{ ...mutedCard, marginBottom: 18, padding: 20 }}>
               <div
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
-                  gap: 12,
+                  gap: 16,
                   flexWrap: "wrap",
                   alignItems: "center",
-                  marginBottom: 14,
+                  marginBottom: 16,
                 }}
               >
-                <h2 style={{ margin: 0, fontSize: 20 }}>Evaluator Dashboard</h2>
-
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  <button
-                    onClick={() => exportToCSV(evaluations)}
-                    style={{ ...buttonBase, background: "#0ea5e9" }}
-                  >
-                    Export CSV
-                  </button>
-
-                  <input
-                    placeholder="Search resident / case / evaluator / rotation / setting"
-                    value={dashboardSearch}
-                    onChange={(e) => setDashboardSearch(e.target.value)}
-                    style={{ ...inputStyle, marginTop: 0, minWidth: 320 }}
-                  />
-
-                  <select
-                    value={ratingFilter}
-                    onChange={(e) => setRatingFilter(e.target.value)}
-                    style={{
-                      padding: 12,
-                      borderRadius: 10,
-                      border: "1px solid #cbd5e1",
-                      background: "white",
-                    }}
-                  >
-                    <option>All</option>
-                    <option>Junior</option>
-                    <option>Intermediate</option>
-                    <option>Senior</option>
-                    <option>Near Consultant</option>
-                  </select>
+                <div>
+                  <div style={{ fontSize: 12, letterSpacing: 1.1, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>
+                    Leadership Dashboard
+                  </div>
+                  <h2 style={{ margin: "6px 0 0", fontSize: 26 }}>Program Intelligence</h2>
+                  <div style={{ color: "#475569", marginTop: 6 }}>
+                    Turn CRFT activity into program-level decisions, resident coaching, and leadership-ready evidence.
+                  </div>
                 </div>
+
+                <SegmentedTabs
+                  value={dashboardView}
+                  onChange={setDashboardView}
+                  options={[
+                    { value: "program", label: "Program Intelligence" },
+                    { value: "residents", label: "Resident Profiles" },
+                    { value: "log", label: "Assessment Log" },
+                  ]}
+                />
               </div>
 
-              <div style={{ marginBottom: 16 }}>
-                <input
-                  placeholder="Enter resident name for timeline / comparison"
-                  value={selectedResident}
-                  onChange={(e) => setSelectedResident(e.target.value)}
-                  style={inputStyle}
-                />
-
-                {selectedResident && (
+              {dashboardView === "program" && (
+                <>
                   <div
                     style={{
-                      marginTop: 10,
-                      padding: 12,
-                      borderRadius: 10,
-                      background: "white",
-                      border: "1px solid #e2e8f0",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gap: 12,
+                      marginBottom: 16,
                     }}
                   >
-                    <strong>Evaluations:</strong> {residentData.length} <br />
-                    <strong>Average Score:</strong> {residentAverage}/24
-                  </div>
-                )}
-              </div>
-
-              {residentData.length >= 2 && (
-                <div
-                  style={{
-                    marginBottom: 16,
-                    padding: 14,
-                    borderRadius: 12,
-                    background: "white",
-                    border: "1px solid #e2e8f0",
-                  }}
-                >
-                  <h3 style={{ marginTop: 0 }}>Resident Comparison Over Time</h3>
-                  <div style={{ marginBottom: 10 }}>
-                    <strong>First:</strong> {formatFirebaseDate(firstResidentEval?.createdAt)} · {firstResidentEval?.total || firstResidentEval?.totalScore || 0}/24
-                  </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <strong>Latest:</strong> {formatFirebaseDate(latestResidentEval?.createdAt)} · {latestResidentEval?.total || latestResidentEval?.totalScore || 0}/24
+                    <MetricCard label="Unique residents" value={programIntelligence.uniqueResidents} subvalue={`${cohortAnalytics.totalEvaluations} total assessments`} tone="primary" />
+                    <MetricCard label="Average CRFT score" value={`${programIntelligence.avgTotal}/24`} subvalue={`${programIntelligence.improvingResidents} residents improved ≥2 points`} tone="success" />
+                    <MetricCard label="Near consultant rate" value={`${programIntelligence.nearConsultantRate}%`} subvalue="Leadership-friendly outcome metric" tone="warning" />
+                    <MetricCard label="Residents needing attention" value={programIntelligence.highRiskResidents.length} subvalue={`${programIntelligence.stagnantResidents} stagnant or declining`} tone={programIntelligence.highRiskResidents.length ? "danger" : "success"} />
                   </div>
 
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {comparison.map((c) => (
-                      <div
-                        key={c.key}
-                        style={{
-                          padding: 10,
-                          borderRadius: 8,
-                          border: "1px solid #e2e8f0",
-                          background: "#f8fafc",
-                        }}
-                      >
-                        <strong>{c.title}:</strong> {c.first} → {c.latest}{" "}
-                        <span
-                          style={{
-                            color: c.diff > 0 ? "#16a34a" : c.diff < 0 ? "#dc2626" : "#475569",
-                            fontWeight: 700,
-                          }}
-                        >
-                          ({c.diff > 0 ? `+${c.diff}` : c.diff})
-                        </span>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.3fr 1fr",
+                      gap: 16,
+                      alignItems: "stretch",
+                      marginBottom: 16,
+                    }}
+                  >
+                    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                        <div>
+                          <h3 style={{ margin: 0 }}>Program score trend</h3>
+                          <div style={{ color: "#64748b", marginTop: 4 }}>Average CRFT score by month</div>
+                        </div>
+                        <div style={{ ...chipStyle("#0c4a6e") }}>Leadership signal</div>
                       </div>
-                    ))}
+                      <MiniLineChart data={programIntelligence.monthlyTrend} max={24} color="#0c4a6e" suffix="/24" />
+                    </div>
+
+                    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                        <div>
+                          <h3 style={{ margin: 0 }}>Program pressure points</h3>
+                          <div style={{ color: "#64748b", marginTop: 4 }}>What leadership needs to act on now</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                          <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>Weakest domain</div>
+                          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 800 }}>{cohortAnalytics.weakestDomain || "—"}</div>
+                        </div>
+                        <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                          <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>Case mix</div>
+                          <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+                            {(programIntelligence.settingCounts.length ? programIntelligence.settingCounts : [{ label: "No tagged cases yet", value: 0 }]).map((item) => (
+                              <div key={item.label} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                                <span>{item.label}</span>
+                                <strong>{item.value}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{ padding: 12, borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+                          <div style={{ fontWeight: 800, color: "#1d4ed8" }}>Leadership interpretation</div>
+                          <div style={{ color: "#1e3a8a", marginTop: 6, lineHeight: 1.45 }}>
+                            This page should answer three questions fast: Are we improving? Where are we weak? Which residents need coaching now?
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  {trendComments.length > 0 && (
-                    <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-                      {trendComments.map((comment, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            padding: 10,
-                            borderRadius: 8,
-                            border: "1px solid #e2e8f0",
-                            background: "#eff6ff",
-                          }}
-                        >
-                          {comment}
+                  <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16, marginBottom: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>Domain heatmap</h3>
+                        <div style={{ color: "#64748b", marginTop: 4 }}>Program cognitive fingerprint</div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ display: "inline-flex", padding: "4px 10px", borderRadius: 999, background: "#fee2e2", color: "#b91c1c", fontSize: 12, fontWeight: 800 }}>Priority</span>
+                        <span style={{ display: "inline-flex", padding: "4px 10px", borderRadius: 999, background: "#fef3c7", color: "#92400e", fontSize: 12, fontWeight: 800 }}>Watch</span>
+                        <span style={{ display: "inline-flex", padding: "4px 10px", borderRadius: 999, background: "#dcfce7", color: "#166534", fontSize: 12, fontWeight: 800 }}>Strong</span>
+                      </div>
+                    </div>
+                    <DomainHeatmap avgByDomain={cohortAnalytics.avgByDomain} />
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 16 }}>
+                    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                        <div>
+                          <h3 style={{ margin: 0 }}>Residents needing attention</h3>
+                          <div style={{ color: "#64748b", marginTop: 4 }}>Early detection for coaching and remediation</div>
+                        </div>
+                      </div>
+                      <RiskTable
+                        residents={programIntelligence.highRiskResidents.slice(0, 8)}
+                        onSelectResident={(resident) => {
+                          setSelectedResident(resident)
+                          setDashboardView("residents")
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                        <div>
+                          <h3 style={{ margin: 0 }}>Top performers</h3>
+                          <div style={{ color: "#64748b", marginTop: 4 }}>Residents with ≥2 assessments</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {(programIntelligence.leaderboard.length ? programIntelligence.leaderboard : [{ resident: "No leaderboard yet", avgScore: 0, delta: 0, count: 0 }]).map((resident, idx) => (
+                          <div key={resident.resident} style={{ padding: 12, borderRadius: 12, background: idx === 0 ? "#eff6ff" : "#f8fafc", border: "1px solid #e2e8f0" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                              <div>
+                                <div style={{ fontWeight: 800 }}>{idx + 1}. {resident.resident}</div>
+                                <div style={{ color: "#64748b", marginTop: 4 }}>{resident.count} assessments</div>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontWeight: 800 }}>{resident.avgScore}/24</div>
+                                <div style={{ color: resident.delta > 0 ? "#047857" : resident.delta < 0 ? "#dc2626" : "#64748b", fontWeight: 700 }}>
+                                  {resident.delta > 0 ? `+${resident.delta}` : resident.delta}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {dashboardView === "residents" && (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 16, alignItems: "start" }}>
+                    <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                      <h3 style={{ marginTop: 0 }}>Resident profile</h3>
+                      <div style={{ color: "#64748b", marginBottom: 12 }}>Type a resident name exactly as saved in evaluations.</div>
+                      <input
+                        placeholder="Resident name"
+                        value={selectedResident}
+                        onChange={(e) => setSelectedResident(e.target.value)}
+                        style={{ ...inputStyle, marginTop: 0 }}
+                      />
+
+                      {selectedResident && (
+                        <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                          <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                            <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>Assessments</div>
+                            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{residentData.length}</div>
+                          </div>
+                          <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                            <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", fontWeight: 800 }}>Average score</div>
+                            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{residentAverage}/24</div>
+                          </div>
+                          {latestResidentEval && (
+                            <div style={{ padding: 12, borderRadius: 12, background: "#eff6ff", border: "1px solid #bfdbfe" }}>
+                              <div style={{ fontSize: 12, color: "#1d4ed8", textTransform: "uppercase", fontWeight: 800 }}>Latest rating</div>
+                              <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: "#1e3a8a" }}>{latestResidentEval.globalRating || getGlobalRating(Number(latestResidentEval.total || latestResidentEval.totalScore || 0))}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: "grid", gap: 16 }}>
+                      {residentData.length >= 1 && latestResidentEval && (
+                        <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+                            <div>
+                              <h3 style={{ margin: 0 }}>Latest reasoning profile</h3>
+                              <div style={{ color: "#64748b", marginTop: 4 }}>{selectedResident} · latest assessment</div>
+                            </div>
+                            <div style={{ ...chipStyle("#0f766e") }}>{latestResidentEval.total || latestResidentEval.totalScore || 0}/24</div>
+                          </div>
+                          <RadarChart scores={latestResidentEval.scores || initialScores} />
+                        </div>
+                      )}
+
+                      {residentData.length >= 2 && (
+                        <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                          <h3 style={{ marginTop: 0 }}>Resident comparison over time</h3>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, marginBottom: 14 }}>
+                            <MetricCard label="First score" value={`${firstResidentEval?.total || firstResidentEval?.totalScore || 0}/24`} subvalue={formatFirebaseDate(firstResidentEval?.createdAt)} />
+                            <MetricCard label="Latest score" value={`${latestResidentEval?.total || latestResidentEval?.totalScore || 0}/24`} subvalue={formatFirebaseDate(latestResidentEval?.createdAt)} tone="primary" />
+                            <MetricCard label="Net change" value={latestResidentEval ? `${(Number(latestResidentEval?.total || latestResidentEval?.totalScore || 0) - Number(firstResidentEval?.total || firstResidentEval?.totalScore || 0)) > 0 ? "+" : ""}${Number(latestResidentEval?.total || latestResidentEval?.totalScore || 0) - Number(firstResidentEval?.total || firstResidentEval?.totalScore || 0)}` : "0"} subvalue="Simple headline number" tone={(Number(latestResidentEval?.total || latestResidentEval?.totalScore || 0) - Number(firstResidentEval?.total || firstResidentEval?.totalScore || 0)) >= 0 ? "success" : "danger"} />
+                          </div>
+
+                          <div style={{ display: "grid", gap: 8 }}>
+                            {comparison.map((c) => (
+                              <div key={c.key} style={{ padding: 12, borderRadius: 10, border: "1px solid #e2e8f0", background: "#f8fafc", display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                                <strong>{c.title}</strong>
+                                <div>
+                                  {c.first} → {c.latest} <span style={{ color: c.diff > 0 ? "#16a34a" : c.diff < 0 ? "#dc2626" : "#475569", fontWeight: 800 }}>{c.diff > 0 ? `(+${c.diff})` : `(${c.diff})`}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {trendComments.length > 0 && (
+                            <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                              {trendComments.map((comment, idx) => (
+                                <div key={idx} style={{ padding: 10, borderRadius: 10, background: "#eff6ff", border: "1px solid #bfdbfe" }}>{comment}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {residentData.length >= 2 && (
+                        <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: 16, padding: 16 }}>
+                          <h3 style={{ marginTop: 0 }}>Domain trend over time</h3>
+                          <RadarOverTime evaluations={residentData} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {dashboardView === "log" && (
+                <>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      marginBottom: 14,
+                    }}
+                  >
+                    <h3 style={{ margin: 0 }}>Assessment log</h3>
+
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <button onClick={() => exportToCSV(evaluations)} style={{ ...buttonBase, background: "#0ea5e9" }}>
+                        Export CSV
+                      </button>
+
+                      <input
+                        placeholder="Search resident / case / evaluator / rotation / setting"
+                        value={dashboardSearch}
+                        onChange={(e) => setDashboardSearch(e.target.value)}
+                        style={{ ...inputStyle, marginTop: 0, minWidth: 320 }}
+                      />
+
+                      <select
+                        value={ratingFilter}
+                        onChange={(e) => setRatingFilter(e.target.value)}
+                        style={{ padding: 12, borderRadius: 10, border: "1px solid #cbd5e1", background: "white" }}
+                      >
+                        <option>All</option>
+                        <option>Junior</option>
+                        <option>Intermediate</option>
+                        <option>Senior</option>
+                        <option>Near Consultant</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {filteredEvaluations.length === 0 ? (
+                    <div style={{ padding: 12, borderRadius: 10, background: "white", border: "1px solid #e2e8f0" }}>
+                      No matching evaluations.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {filteredEvaluations.map((e) => (
+                        <div key={e.id} style={{ padding: 14, borderRadius: 14, background: "white", border: "1px solid #e2e8f0", boxShadow: "0 4px 14px rgba(15, 23, 42, 0.04)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                            <div style={{ display: "grid", gap: 4 }}>
+                              <div><strong>Resident:</strong> {e.resident || "—"}</div>
+                              <div><strong>Case:</strong> {e.caseName || "—"}</div>
+                              <div><strong>Setting:</strong> {e.universalCaseSetting || "—"}</div>
+                              <div><strong>Rotation:</strong> {e.rotation || "—"}</div>
+                              <div><strong>Evaluator:</strong> {e.evaluator || "—"}</div>
+                              <div><strong>Score:</strong> {e.total || e.totalScore || 0}/24 {e.globalRating ? `· ${e.globalRating}` : ""}</div>
+                              <div><strong>Date:</strong> {formatFirebaseDate(e.createdAt)}</div>
+                              {e.universalCaseTitle && <div><strong>Universal case:</strong> {e.universalCaseTitle}</div>}
+                              {e.benchmarkResult?.totalScore !== undefined && <div><strong>Benchmark:</strong> {e.benchmarkResult.totalScore}/100 · {e.benchmarkResult.level}</div>}
+                              {e.overrideCompleted && <div><strong>Consultant override:</strong> completed</div>}
+                              {e.whatChangedSummary && <div><strong>What changed:</strong> saved</div>}
+                              {e.structuredReasoning && <div><strong>Structured reasoning:</strong> saved</div>}
+                            </div>
+
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
+                              <button onClick={() => loadEvaluation(e)} style={{ ...buttonBase, background: "#0f766e" }}>
+                                Load into Form
+                              </button>
+                              <button onClick={() => handleDeleteEvaluation(e.id)} style={{ ...buttonBase, background: "#dc2626" }}>
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+
+                          {e.oneLineSummary && (
+                            <div style={{ marginTop: 10, padding: 10, borderRadius: 10, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+                              <strong>Summary:</strong> {e.oneLineSummary}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
-                </div>
-              )}
-
-              {residentData.length >= 2 && (
-                <div
-                  style={{
-                    marginBottom: 16,
-                    padding: 14,
-                    borderRadius: 12,
-                    background: "white",
-                    border: "1px solid #e2e8f0",
-                  }}
-                >
-                  <h3 style={{ marginTop: 0 }}>Domain Trend Over Time</h3>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-                      gap: 10,
-                    }}
-                  >
-                    {domains.map((domain) => {
-                      const latestValue = Number(latestResidentEval?.scores?.[domain.key] || 0)
-                      const firstValue = Number(firstResidentEval?.scores?.[domain.key] || 0)
-                      return (
-                        <div
-                          key={domain.key}
-                          style={{
-                            padding: 10,
-                            borderRadius: 10,
-                            background: "#f8fafc",
-                            border: "1px solid #e2e8f0",
-                          }}
-                        >
-                          <strong>{domain.title}</strong>
-                          <div style={{ marginTop: 6 }}>{firstValue} → {latestValue}</div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {filteredEvaluations.length === 0 ? (
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 10,
-                    background: "white",
-                    border: "1px solid #e2e8f0",
-                  }}
-                >
-                  No matching evaluations.
-                </div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {filteredEvaluations.map((e) => (
-                    <div
-                      key={e.id}
-                      style={{
-                        padding: 14,
-                        borderRadius: 12,
-                        background: "white",
-                        border: "1px solid #e2e8f0",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                        <div>
-                          <div><strong>Resident:</strong> {e.resident || "—"}</div>
-                          <div><strong>Case:</strong> {e.caseName || "—"}</div>
-                          <div><strong>Setting:</strong> {e.universalCaseSetting || "—"}</div>
-                          <div><strong>Rotation:</strong> {e.rotation || "—"}</div>
-                          <div><strong>Evaluator:</strong> {e.evaluator || "—"}</div>
-                          <div><strong>Score:</strong> {e.total || e.totalScore || 0}/24 {e.globalRating ? `· ${e.globalRating}` : ""}</div>
-                          <div><strong>Date:</strong> {formatFirebaseDate(e.createdAt)}</div>
-                          {e.universalCaseTitle && <div><strong>Universal case:</strong> {e.universalCaseTitle}</div>}
-                          {e.benchmarkResult?.totalScore !== undefined && (
-                            <div><strong>Benchmark:</strong> {e.benchmarkResult.totalScore}/100 · {e.benchmarkResult.level}</div>
-                          )}
-                          {e.overrideCompleted && <div><strong>Consultant override:</strong> completed</div>}
-                          {e.whatChangedSummary && <div><strong>What changed:</strong> saved</div>}
-                          {e.structuredReasoning && <div><strong>Structured reasoning:</strong> saved</div>}
-                        </div>
-
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "start" }}>
-                          <button
-                            onClick={() => loadEvaluation(e)}
-                            style={{ ...buttonBase, background: "#0f766e" }}
-                          >
-                            Load into Form
-                          </button>
-                          <button
-                            onClick={() => handleDeleteEvaluation(e.id)}
-                            style={{ ...buttonBase, background: "#dc2626" }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-
-                      {e.oneLineSummary && (
-                        <div
-                          style={{
-                            marginTop: 10,
-                            padding: 10,
-                            borderRadius: 8,
-                            background: "#f8fafc",
-                            border: "1px solid #e2e8f0",
-                          }}
-                        >
-                          <strong>Summary:</strong> {e.oneLineSummary}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                </>
               )}
             </div>
           </>
