@@ -597,6 +597,22 @@ function safeLower(value) {
   return String(value || "").trim().toLowerCase()
 }
 
+
+function normalizeSessionConfig(raw) {
+  const value = raw || {}
+  const releasedCaseKey = value.releasedCaseKey || value.activeCase || ""
+  const releasedCaseTitle =
+    value.releasedCaseTitle ||
+    universalCases.find((item) => item.key === releasedCaseKey)?.title ||
+    ""
+  return {
+    isOpen: Boolean(value.isOpen),
+    sessionCode: value.sessionCode || "",
+    releasedCaseKey,
+    releasedCaseTitle,
+  }
+}
+
 function card(bg = "#fff") {
   return {
     background: bg,
@@ -841,10 +857,26 @@ function ResidentSubmissionPanel({
 }
 
 function SessionControlPanel({ sessionConfig, setDraft, draft, onSave, cases }) {
+  const liveCase = cases.find((item) => item.key === sessionConfig?.releasedCaseKey)
   return (
     <div style={card()}>
-      <h3 style={{ marginTop: 0 }}>Session Control</h3>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div>
+          <h3 style={{ marginTop: 0, marginBottom: 6 }}>Session Control</h3>
+          <div style={{ color: "#475569" }}>Change the code, release one case, then open or close the session without touching Firebase.</div>
+        </div>
+        <div style={{
+          padding: "8px 12px",
+          borderRadius: 999,
+          background: sessionConfig?.isOpen ? "#dcfce7" : "#fee2e2",
+          color: sessionConfig?.isOpen ? "#166534" : "#991b1b",
+          fontWeight: 700,
+        }}>
+          {sessionConfig?.isOpen ? "LIVE · OPEN" : "LIVE · CLOSED"}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, marginTop: 12 }}>
         <div>
           <label><strong>Session code</strong></label>
           <input value={draft.sessionCode || ""} onChange={(e) => setDraft((prev) => ({ ...prev, sessionCode: e.target.value }))} style={inputStyle} />
@@ -855,6 +887,7 @@ function SessionControlPanel({ sessionConfig, setDraft, draft, onSave, cases }) 
             <option value="">Select case</option>
             {cases.map((caseItem) => <option key={caseItem.key} value={caseItem.key}>{caseItem.title} · {caseItem.setting}</option>)}
           </select>
+          <div style={{ marginTop: 6, fontSize: 12, color: "#64748b" }}>Stored key: {draft.releasedCaseKey || "—"}</div>
         </div>
         <div>
           <label><strong>Session status</strong></label>
@@ -864,10 +897,24 @@ function SessionControlPanel({ sessionConfig, setDraft, draft, onSave, cases }) 
           </select>
         </div>
       </div>
-      <div style={{ marginTop: 12, color: "#475569" }}>
-        Current live case: <strong>{sessionConfig?.releasedCaseTitle || "None"}</strong> · status: <strong>{sessionConfig?.isOpen ? "Open" : "Closed"}</strong>
+
+      <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+        <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>Live code</div>
+          <div style={{ fontWeight: 800 }}>{sessionConfig?.sessionCode || "—"}</div>
+        </div>
+        <div style={{ padding: 12, borderRadius: 12, background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>Live case</div>
+          <div style={{ fontWeight: 800 }}>{sessionConfig?.releasedCaseTitle || liveCase?.title || "None"}</div>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{sessionConfig?.releasedCaseKey || "No key"}</div>
+        </div>
       </div>
-      <button onClick={onSave} style={{ ...buttonBase, background: "#0c4a6e", marginTop: 12 }}>Save Session Settings</button>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+        <button onClick={() => setDraft((prev) => ({ ...prev, isOpen: true }))} style={{ ...buttonBase, background: "#0f766e" }}>Set Open</button>
+        <button onClick={() => setDraft((prev) => ({ ...prev, isOpen: false }))} style={{ ...buttonBase, background: "#b91c1c" }}>Set Closed</button>
+        <button onClick={onSave} style={{ ...buttonBase, background: "#0c4a6e" }}>Save Session Settings</button>
+      </div>
     </div>
   )
 }
@@ -1131,10 +1178,10 @@ function ProgramIntelligence({ evaluations }) {
   )
 }
 
-function ReportsPage({ evaluations }) {
-  const exportCsv = () => {
-    const headers = ["Resident ID","Case","Session","Type","Total","Global Rating","Timestamp"]
-    const rows = evaluations.map((entry) => [
+function ReportsPage({ evaluations, sessionConfig }) {
+  const buildCsv = (rows, filename) => {
+    const headers = ["Resident ID","Case","Session","Type","Total","Global Rating","Timestamp","Evaluator","Rotation","Case Key"]
+    const contentRows = rows.map((entry) => [
       `"${entry.residentId || entry.resident || ""}"`,
       `"${entry.caseName || ""}"`,
       `"${entry.sessionCode || ""}"`,
@@ -1142,22 +1189,59 @@ function ReportsPage({ evaluations }) {
       `"${entry.total || 0}"`,
       `"${entry.globalRating || ""}"`,
       `"${formatFirebaseDate(entry.createdAt)}"`,
+      `"${entry.evaluator || ""}"`,
+      `"${entry.rotation || ""}"`,
+      `"${entry.universalCaseKey || ""}"`,
     ])
-    const content = [headers, ...rows].map((row) => row.join(",")).join("\n")
+    const content = [headers, ...contentRows].map((row) => row.join(",")).join("\n")
     const blob = new Blob([content], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = "crft_program_export.csv"
+    link.download = filename
     link.click()
     URL.revokeObjectURL(url)
   }
 
+  const currentSessionRows = evaluations.filter((entry) => safeLower(entry.sessionCode) === safeLower(sessionConfig?.sessionCode))
+  const residentCounts = RESIDENT_IDS.map((id) => ({
+    id,
+    n: evaluations.filter((entry) => safeLower(entry.residentId) === safeLower(id)).length,
+  }))
+
   return (
-    <div style={card()}>
-      <h3 style={{ marginTop: 0 }}>Reports / Exports</h3>
-      <div style={{ color: "#475569", marginBottom: 12 }}>Export a flat CSV for QI analysis or program review.</div>
-      <button onClick={exportCsv} style={{ ...buttonBase, background: "#0c4a6e" }}>Export CSV</button>
+    <div style={{ display: "grid", gap: 16 }}>
+      <div style={card()}>
+        <h3 style={{ marginTop: 0 }}>Reports / Exports</h3>
+        <div style={{ color: "#475569", marginBottom: 12 }}>Export a flat CSV for QI analysis, session monitoring, or program review.</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={() => buildCsv(evaluations, "crft_program_export_all.csv")} style={{ ...buttonBase, background: "#0c4a6e" }}>Export All CSV</button>
+          <button onClick={() => buildCsv(currentSessionRows, `crft_session_${sessionConfig?.sessionCode || "current"}.csv`)} style={{ ...buttonBase, background: "#0f766e" }}>Export Current Session</button>
+          {RESIDENT_IDS.map((id) => (
+            <button key={id} onClick={() => buildCsv(evaluations.filter((entry) => safeLower(entry.residentId) === safeLower(id)), `crft_${id}.csv`)} style={{ ...buttonBase, background: "#475569" }}>
+              Export {id}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+        <MetricCard label="All records" value={evaluations.length} tone="#0c4a6e" />
+        <MetricCard label="Current session records" value={currentSessionRows.length} tone="#0f766e" />
+        <MetricCard label="Live session code" value={sessionConfig?.sessionCode || "—"} tone="#7c3aed" />
+      </div>
+
+      <div style={card()}>
+        <h3 style={{ marginTop: 0 }}>Resident Export Readiness</h3>
+        <div style={{ display: "grid", gap: 10 }}>
+          {residentCounts.map((row) => (
+            <div key={row.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <div>{row.id}</div>
+              <strong>{row.n} records</strong>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1188,8 +1272,8 @@ export default function App() {
   const [directorPassword, setDirectorPassword] = useState("")
 
   const [evaluations, setEvaluations] = useState([])
-  const [sessionConfig, setSessionConfig] = useState({ isOpen: false, sessionCode: "", releasedCaseKey: "", releasedCaseTitle: "" })
-  const [sessionDraft, setSessionDraft] = useState({ isOpen: false, sessionCode: "", releasedCaseKey: "", releasedCaseTitle: "" })
+  const [sessionConfig, setSessionConfig] = useState(normalizeSessionConfig())
+  const [sessionDraft, setSessionDraft] = useState(normalizeSessionConfig())
   const [statusMessage, setStatusMessage] = useState("")
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(initialForm)
@@ -1205,8 +1289,9 @@ export default function App() {
     if (!user) return
     const unsubEvals = subscribeEvaluations(setEvaluations)
     const unsubSession = subscribeSessionConfig((value) => {
-      setSessionConfig(value || { isOpen: false, sessionCode: "", releasedCaseKey: "", releasedCaseTitle: "" })
-      setSessionDraft((prev) => ({ ...prev, ...(value || {}) }))
+      const normalized = normalizeSessionConfig(value)
+      setSessionConfig(normalized)
+      setSessionDraft((prev) => ({ ...prev, ...normalized }))
     })
     return () => {
       if (typeof unsubEvals === "function") unsubEvals()
@@ -1490,7 +1575,7 @@ export default function App() {
             <TopNav items={["Leadership Dashboard", "Program Intelligence", "Reports / Exports"]} active={directorTab} onChange={setDirectorTab} />
             {directorTab === "Leadership Dashboard" && <LeadershipDashboard evaluations={evaluations} />}
             {directorTab === "Program Intelligence" && <ProgramIntelligence evaluations={evaluations} />}
-            {directorTab === "Reports / Exports" && <ReportsPage evaluations={evaluations} />}
+            {directorTab === "Reports / Exports" && <ReportsPage evaluations={evaluations} sessionConfig={sessionConfig} />}
           </>
         )}
       </div>
