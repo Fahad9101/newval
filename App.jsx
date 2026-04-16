@@ -414,7 +414,7 @@ const universalCases = [
       "Do they explain why the pain is low risk?",
     ],
   },
-]]
+]
 
 function getGlobalRating(total) {
   if (total === 0) return "Unrated"
