@@ -741,6 +741,31 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [savingSession, setSavingSession] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [selectedRole, setSelectedRole] = useState("");
+  const [accessGranted, setAccessGranted] = useState(false);
+
+  function enterResident() {
+    setSelectedRole("Resident");
+    setResponse((r) => ({ ...r, role: "Resident" }));
+    setAccessGranted(true);
+  }
+
+  function enterEvaluator() {
+    setSelectedRole("Evaluator");
+    setResponse((r) => ({ ...r, role: "Evaluator" }));
+    setAccessGranted(true);
+  }
+
+  function enterProgramDirector() {
+    setSelectedRole("Program Director");
+    setResponse((r) => ({ ...r, role: "Program Director" }));
+    setAccessGranted(true);
+  }
+
+  function backToRoleSelect() {
+    setAccessGranted(false);
+    setSelectedRole("");
+  }
 
   const currentCase = useMemo(() => CASE_LIBRARY.find((c) => c.id === session.currentCaseId) || CASE_LIBRARY[0], [session.currentCaseId]);
   const submissionKey = `${session.sessionCode}-${session.dayIndex}-${response.residentId}`;
@@ -899,11 +924,80 @@ export default function App() {
     );
   }
 
+  if (!accessGranted) {
+    return (
+      <div className="min-h-screen bg-slate-50 p-6 text-slate-900">
+        <div className="mx-auto max-w-5xl space-y-6">
+          <section className="rounded-2xl bg-white p-8 shadow-sm">
+            <h1 className="text-3xl font-bold">CRFT Phase 1 Integrated App</h1>
+            <p className="mt-3 text-sm text-slate-600">
+              Choose how you want to enter the system.
+            </p>
+          </section>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-2xl font-semibold">Resident</h2>
+              <p className="mt-3 text-sm text-slate-600">
+                Enter cases, submit reasoning, and receive structured feedback.
+              </p>
+              <button
+                onClick={enterResident}
+                className="mt-6 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-sm"
+              >
+                Enter as Resident
+              </button>
+            </section>
+
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-2xl font-semibold">Evaluator</h2>
+              <p className="mt-3 text-sm text-slate-600">
+                Review resident performance, assign manual scores, and track calibration.
+              </p>
+              <button
+                onClick={enterEvaluator}
+                className="mt-6 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-sm"
+              >
+                Enter as Evaluator
+              </button>
+            </section>
+
+            <section className="rounded-2xl bg-white p-6 shadow-sm">
+              <h2 className="text-2xl font-semibold">Program Director</h2>
+              <p className="mt-3 text-sm text-slate-600">
+                View leadership dashboard, session controls, and program-level performance.
+              </p>
+              <button
+                onClick={enterProgramDirector}
+                className="mt-6 w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-sm"
+              >
+                Enter as Program Director
+              </button>
+            </section>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-6 text-slate-900">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="rounded-2xl bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-bold">CRFT Phase 1 Integrated App (Firebase)</h1>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold">CRFT Phase 1 Integrated App (Firebase)</h1>
+              <div className="mt-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                Logged in as: {selectedRole}
+              </div>
+            </div>
+            <button
+              onClick={backToRoleSelect}
+              className="rounded-2xl border px-4 py-2 text-sm font-medium"
+            >
+              Change role
+            </button>
+          </div>
           <p className="mt-2 text-sm text-slate-600">
             Firebase-wired version with persistent session control, real-time submissions, manual/auto scoring,
             bias/error tagging, dangerous-miss logic, calibration, and CSV export.
