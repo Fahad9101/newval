@@ -1,0 +1,12 @@
+1) Add these files to the root of your repo:
+   - tailwind.config.js
+   - postcss.config.js
+   - styles.css
+   - main.jsx
+
+2) Install Tailwind dependencies:
+   npm install -D tailwindcss postcss autoprefixer
+
+3) Commit and push.
+
+4) Rebuild.
