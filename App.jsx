@@ -366,6 +366,7 @@ function ResidentView({
     confidence: 50,
     timeSeconds: 0,
   });
+  const [sessionStartTime, setSessionStartTime] = useState(null);
   const [submittedFeedback, setSubmittedFeedback] = useState(null);
 
   async function handleUnlock() {
@@ -384,6 +385,7 @@ function ResidentView({
         setAccess(null);
       } else {
         setAccess(result.activation);
+        setSessionStartTime(Date.now());
       }
     } catch (e) {
       setError("Activation check failed.");
@@ -402,8 +404,8 @@ function ResidentView({
       confidence: Number(response.confidence),
       leadingDiagnosis: response.leadingDiagnosis,
       freeText: response.freeText,
-      timeSeconds: Number(response.timeSeconds || 0),
-      startedAt: access.createdAt || new Date().toISOString(),
+      timeSeconds: sessionStartTime ? Math.max(1, Math.round((Date.now() - sessionStartTime) / 1000)) : 0,
+      startedAt: sessionStartTime ? new Date(sessionStartTime).toISOString() : (access.createdAt || new Date().toISOString()),
       submittedAt: new Date().toISOString(),
     };
 
@@ -462,6 +464,7 @@ function ResidentView({
       confidence: 50,
       timeSeconds: 0,
     });
+    setSessionStartTime(null);
   }
 
   return (
@@ -547,14 +550,10 @@ function ResidentView({
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-sm font-medium">Time (seconds)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-full rounded-2xl border p-3"
-                      value={response.timeSeconds}
-                      onChange={(e) => setResponse((r) => ({ ...r, timeSeconds: Number(e.target.value) || 0 }))}
-                    />
+                    <label className="mb-2 block text-sm font-medium">Time tracking</label>
+                    <div className="w-full rounded-2xl border bg-slate-50 p-3 text-sm text-slate-600">
+                      Calculated automatically from case unlock to submission
+                    </div>
                   </div>
                 </div>
                 <Button onClick={handleResidentSubmit} className="bg-slate-900 text-white">
@@ -567,12 +566,18 @@ function ResidentView({
 
         {submittedFeedback ? (
           <Card title="Your Feedback">
-            <div className="space-y-3 text-sm">
-              <div>Auto total: <span className="font-semibold">{submittedFeedback.autoResult.total}/24</span></div>
-              <div>Global rating: <span className="font-semibold">{submittedFeedback.autoResult.globalRating}</span></div>
-              <div>Benchmark score: <span className="font-semibold">{submittedFeedback.benchmark.benchmarkPercent}%</span></div>
-              <div className="leading-7 text-slate-700">{submittedFeedback.feedbackText}</div>
-            </div>
+            {session.dayIndex <= 2 ? (
+              <div className="text-sm text-slate-700">
+                Feedback is intentionally hidden for the first two cases.
+              </div>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div>Auto total: <span className="font-semibold">{submittedFeedback.autoResult.total}/24</span></div>
+                <div>Global rating: <span className="font-semibold">{submittedFeedback.autoResult.globalRating}</span></div>
+                <div>Benchmark score: <span className="font-semibold">{submittedFeedback.benchmark.benchmarkPercent}%</span></div>
+                <div className="leading-7 text-slate-700">{submittedFeedback.feedbackText}</div>
+              </div>
+            )}
           </Card>
         ) : null}
       </div>
@@ -596,6 +601,7 @@ function EvaluatorView({
   });
   const [createdCode, setCreatedCode] = useState("");
   const [manualMap, setManualMap] = useState({});
+  const [manualSubmittedMap, setManualSubmittedMap] = useState({});
 
   const currentCase = CASE_LIBRARY.find((c) => c.id === session.currentCaseId) || CASE_LIBRARY[0];
 
@@ -614,6 +620,10 @@ function EvaluatorView({
 
   function setManualState(recordId, next) {
     setManualMap((prev) => ({ ...prev, [recordId]: next }));
+  }
+
+  function handleSubmitManualEvaluation(recordId) {
+    setManualSubmittedMap((prev) => ({ ...prev, [recordId]: true }));
   }
 
   async function handleCreateActivation() {
@@ -784,7 +794,6 @@ function EvaluatorView({
                     <div className="space-y-3">
                       <div className="rounded-xl bg-slate-50 p-3 text-sm"><span className="font-medium">Leading diagnosis:</span> {record.leadingDiagnosis || "—"}</div>
                       <div className="rounded-xl bg-slate-50 p-3 text-sm leading-6 whitespace-pre-wrap">{record.freeText || "—"}</div>
-                      <div className="rounded-xl bg-slate-50 p-3 text-sm leading-6">{record.feedbackText}</div>
                     </div>
 
                     <div className="space-y-3">
@@ -813,33 +822,45 @@ function EvaluatorView({
                       ))}
 
                       <div className="grid gap-3 md:grid-cols-2">
-                        <select
-                          multiple
-                          className="min-h-[120px] rounded-2xl border p-3"
-                          value={manual.selectedBiasTags}
-                          onChange={(e) => setManualState(record.id, {
-                            ...manual,
-                            selectedBiasTags: Array.from(e.target.selectedOptions).map((o) => o.value),
-                          })}
-                        >
-                          {Object.entries(COGNITIVE_BIASES).map(([key, label]) => (
-                            <option key={key} value={key}>{label}</option>
-                          ))}
-                        </select>
+                        <div>
+                          <label className="mb-2 block text-sm font-medium">Cognitive Bias Tags</label>
+                          <div className="mb-2 text-xs text-slate-500">
+                            Why the reasoning went wrong
+                          </div>
+                          <select
+                            multiple
+                            className="min-h-[140px] w-full rounded-2xl border p-3"
+                            value={manual.selectedBiasTags}
+                            onChange={(e) => setManualState(record.id, {
+                              ...manual,
+                              selectedBiasTags: Array.from(e.target.selectedOptions).map((o) => o.value),
+                            })}
+                          >
+                            {Object.entries(COGNITIVE_BIASES).map(([key, label]) => (
+                              <option key={key} value={key}>{label}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                        <select
-                          multiple
-                          className="min-h-[120px] rounded-2xl border p-3"
-                          value={manual.selectedErrorTags}
-                          onChange={(e) => setManualState(record.id, {
-                            ...manual,
-                            selectedErrorTags: Array.from(e.target.selectedOptions).map((o) => o.value),
-                          })}
-                        >
-                          {Object.entries(REASONING_ERRORS).map(([key, label]) => (
-                            <option key={key} value={key}>{label}</option>
-                          ))}
-                        </select>
+                        <div>
+                          <label className="mb-2 block text-sm font-medium">Reasoning Error Tags</label>
+                          <div className="mb-2 text-xs text-slate-500">
+                            What went wrong in the reasoning output
+                          </div>
+                          <select
+                            multiple
+                            className="min-h-[140px] w-full rounded-2xl border p-3"
+                            value={manual.selectedErrorTags}
+                            onChange={(e) => setManualState(record.id, {
+                              ...manual,
+                              selectedErrorTags: Array.from(e.target.selectedOptions).map((o) => o.value),
+                            })}
+                          >
+                            {Object.entries(REASONING_ERRORS).map(([key, label]) => (
+                              <option key={key} value={key}>{label}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       <textarea
@@ -848,6 +869,27 @@ function EvaluatorView({
                         onChange={(e) => setManualState(record.id, { ...manual, comments: e.target.value })}
                         placeholder="Manual evaluator comments"
                       />
+
+                      <div className="flex items-center gap-3">
+                        <Button
+                          onClick={() => handleSubmitManualEvaluation(record.id)}
+                          className="bg-slate-900 text-white"
+                        >
+                          Submit Manual Evaluation
+                        </Button>
+                        {manualSubmittedMap[record.id] ? (
+                          <span className="text-sm text-emerald-700">Manual evaluation submitted</span>
+                        ) : (
+                          <span className="text-sm text-slate-500">Auto feedback stays hidden until manual evaluation is submitted</span>
+                        )}
+                      </div>
+
+                      {manualSubmittedMap[record.id] ? (
+                        <div className="rounded-xl bg-slate-50 p-3 text-sm leading-6">
+                          <div className="mb-2 font-medium">Auto Feedback (shown after manual submission)</div>
+                          {record.feedbackText}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
