@@ -292,6 +292,27 @@ function average(arr) {
   return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
+function buildManualSummary(manual) {
+  const total = sumDomainScores(manual.domainScores);
+  return {
+    ...manual,
+    total,
+    globalRating: getGlobalRating(total),
+  };
+}
+
+function buildCalibration(autoResult, manualSummary) {
+  const totalDifference = Math.abs((autoResult?.total || 0) - (manualSummary?.total || 0));
+  const domainDifferences = Object.fromEntries(
+    CRFT_DOMAINS.map((d) => [d, Math.abs((autoResult?.domainScores?.[d] || 0) - (manualSummary?.domainScores?.[d] || 0))])
+  );
+  const exactMatchDomains = CRFT_DOMAINS.filter(
+    (d) => Number(autoResult?.domainScores?.[d] || 0) === Number(manualSummary?.domainScores?.[d] || 0)
+  ).length;
+  const agreementClass = totalDifference <= 2 ? "high" : totalDifference <= 5 ? "moderate" : "low";
+  return { totalDifference, domainDifferences, exactMatchDomains, agreementClass };
+}
+
 function Button({ children, className = "", ...props }) {
   return (
     <button
@@ -904,6 +925,7 @@ function EvaluatorView({
 }
 
 function ProgramDirectorView({ session, records, activations, onBack }) {
+  const [selectedResidentFile, setSelectedResidentFile] = useState("");
   const totalAssessments = records.length;
   const avgAutoScore = average(records.map((r) => r.autoTotal));
   const dangerousMissRate = average(records.map((r) => (r.dangerousMiss ? 1 : 0)));
@@ -921,10 +943,18 @@ function ProgramDirectorView({ session, records, activations, onBack }) {
         id,
         count: mine.length,
         avgAuto: average(mine.map((r) => r.autoTotal)),
+        avgManual: average(mine.map((r) => {
+          const manualScores = r.manualDomainScores || {};
+          return Object.keys(manualScores).length ? sumDomainScores(manualScores) : 0;
+        }).filter((n) => n > 0)),
         avgBenchmark: average(mine.map((r) => r.benchmark?.benchmarkPercent || 0)),
       };
     })
     .filter((r) => r.count > 0);
+
+  const residentFileRecords = selectedResidentFile
+    ? records.filter((r) => r.residentId === selectedResidentFile)
+    : [];
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 text-slate-900">
@@ -969,6 +999,25 @@ function ProgramDirectorView({ session, records, activations, onBack }) {
         </div>
 
         <Card title="Resident Summary">
+          <div className="mb-4 grid gap-4 md:grid-cols-[260px,1fr]">
+            <div>
+              <label className="mb-2 block text-sm font-medium">Resident File</label>
+              <select
+                className="w-full rounded-2xl border p-3"
+                value={selectedResidentFile}
+                onChange={(e) => setSelectedResidentFile(e.target.value)}
+              >
+                <option value="">Select resident</option>
+                {residentSummary.map((r) => (
+                  <option key={r.id} value={r.id}>{r.id}</option>
+                ))}
+              </select>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+              Program Director can review the dashboard above and open a separate resident file below containing both automatic and manual evaluations.
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead>
@@ -976,6 +1025,7 @@ function ProgramDirectorView({ session, records, activations, onBack }) {
                   <th className="p-2">Resident</th>
                   <th className="p-2">Assessments</th>
                   <th className="p-2">Avg Auto</th>
+                  <th className="p-2">Avg Manual</th>
                   <th className="p-2">Avg Benchmark</th>
                 </tr>
               </thead>
@@ -985,16 +1035,82 @@ function ProgramDirectorView({ session, records, activations, onBack }) {
                     <td className="p-2">{r.id}</td>
                     <td className="p-2">{r.count}</td>
                     <td className="p-2">{r.avgAuto.toFixed(1)}</td>
+                    <td className="p-2">{r.avgManual ? r.avgManual.toFixed(1) : "—"}</td>
                     <td className="p-2">{r.avgBenchmark.toFixed(0)}%</td>
                   </tr>
                 ))}
                 {!residentSummary.length ? (
-                  <tr><td colSpan={4} className="p-4 text-center text-slate-500">No resident data yet.</td></tr>
+                  <tr><td colSpan={5} className="p-4 text-center text-slate-500">No resident data yet.</td></tr>
                 ) : null}
               </tbody>
             </table>
           </div>
         </Card>
+
+        {selectedResidentFile ? (
+          <Card title={`Resident File — ${selectedResidentFile}`}>
+            <div className="space-y-4">
+              {residentFileRecords.map((r) => {
+                const manualTotal = r.manualDomainScores && Object.keys(r.manualDomainScores).length
+                  ? sumDomainScores(r.manualDomainScores)
+                  : null;
+                return (
+                  <div key={r.id} className="rounded-2xl border p-4">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                      <div className="font-semibold">{r.caseId} · Day {r.sessionDay}</div>
+                      <div className="text-sm text-slate-500">Benchmark {r.benchmark?.benchmarkPercent ?? 0}%</div>
+                    </div>
+
+                    <div className="grid gap-6 xl:grid-cols-3">
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <div className="mb-3 text-base font-semibold">Submission</div>
+                        <div className="text-sm"><span className="font-medium">Leading diagnosis:</span> {r.leadingDiagnosis || "—"}</div>
+                        <div className="mt-3 text-sm leading-6 whitespace-pre-wrap">{r.freeText || "—"}</div>
+                      </div>
+
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <div className="mb-3 text-base font-semibold">Automatic Evaluation</div>
+                        <div className="space-y-2 text-sm">
+                          {CRFT_DOMAINS.map((domain) => (
+                            <div key={domain} className="flex items-center justify-between">
+                              <span>{DOMAIN_LABELS[domain]}</span>
+                              <span className="font-semibold">{r.autoDomainScores?.[domain] ?? 0}/4</span>
+                            </div>
+                          ))}
+                          <div className="border-t pt-2 font-semibold">Auto total: {r.autoTotal}/24</div>
+                          <div>Auto rating: {r.autoGlobalRating || "—"}</div>
+                          <div>Dangerous miss: {r.dangerousMiss ? "Yes" : "No"}</div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl bg-slate-50 p-4">
+                        <div className="mb-3 text-base font-semibold">Manual Evaluation</div>
+                        <div className="space-y-2 text-sm">
+                          {r.manualDomainScores && Object.keys(r.manualDomainScores).length ? (
+                            <>
+                              {CRFT_DOMAINS.map((domain) => (
+                                <div key={domain} className="flex items-center justify-between">
+                                  <span>{DOMAIN_LABELS[domain]}</span>
+                                  <span className="font-semibold">{r.manualDomainScores?.[domain] ?? 0}/4</span>
+                                </div>
+                              ))}
+                              <div className="border-t pt-2 font-semibold">Manual total: {manualTotal}/24</div>
+                            </>
+                          ) : (
+                            <div className="text-slate-500">No manual evaluation saved yet.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {!residentFileRecords.length ? (
+                <div className="text-slate-500">No records found for this resident.</div>
+              ) : null}
+            </div>
+          </Card>
+        ) : null}
       </div>
     </div>
   );
