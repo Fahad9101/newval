@@ -514,7 +514,7 @@ function buildManualComment(manualSummary, selectedBiasTags = [], selectedErrorT
     : "A clear weakest-domain pattern was not identified.";
 
   return `${strengthSentence} ${weaknessSentence} The evaluator identified ${biasText}, with the main observable reasoning problems being ${errorText}. Overall manual performance was rated as ${manualSummary.globalRating} with a total score of ${manualSummary.total}/24. The resident should focus on making reasoning more explicit, prioritizing the differential more clearly, and updating the assessment more deliberately as new information emerges.`;
-
+}
 
 function buildModelSolution(caseObj) {
   const accepted = caseObj.hiddenRubric?.acceptedLeadingDiagnoses || [];
@@ -533,7 +533,6 @@ function buildModelSolution(caseObj) {
     `Immediate priorities: stabilize the patient, address the most dangerous possibilities first, and act on ${anticipatory}.`,
     `Reassessment plan: follow ${reassess} and update the working diagnosis as new information emerges.`,
   ].join(" ");
-}
 }
 
 function Button({ children, className = "", ...props }) {
